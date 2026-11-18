@@ -1,0 +1,13 @@
+{
+  "dataset": "webqsp",
+  "level": 0.8,
+  "limit": 2,
+  "hops": 2,
+  "path_mode": "gcr_digraph",
+  "model_path": "rmanluo/GCR-Qwen2-0.5B-Instruct",
+  "k": 10,
+  "dtype": "fp32",
+  "attn_implementation": "sdpa",
+  "out": "/home/user/CC-GCD/results/gcr_ikgqa",
+  "force": true
+}

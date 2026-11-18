@@ -16,8 +16,12 @@ No CC-GCD decoder yet.
 | `cc_gcd/data/paths.py` | KG-Trie path enumeration with parallel relations kept (GCR's DiGraph drops them) |
 | `data_prep/download_brink.sh` | Download BRINK Family / FB15k-237 (and optionally Wikidata5m) from Hugging Face |
 | `data_prep/prepare_brink.py` | Raw BRINK to `data/processed/brink/<dataset>/` + `stats.json` |
+| `cc_gcd/data/ikgqa.py` | IKGQA loader: GoG's per-question deletions applied to RoG subgraphs |
+| `data_prep/prepare_ikgqa.py` | GoG IKG-0/20/40/60/80% for WebQSP / CWQ + hard-trie ceilings |
+| `cc_gcd/baselines/gcr.py` | B1 wrapper around the official GCR code (explicit KG-Trie paths, faithful-path rate) |
+| `scripts/run_gcr_ikgqa.py` | GCR step 1 on IKGQA with GCR's own Hit/F1 |
 | `analysis/kg_trie_coverage.py` | Hard KG-Trie ceiling on RoG-WebQSP / RoG-CWQ |
-| `scripts/setup.sh` | Pinned third-party clones (GCR 9518e8e, BRINK b95506d) + Python env |
+| `scripts/setup.sh` | Pinned third-party clones (GCR 9518e8e, BRINK b95506d, GoG c0b2c36) + Python env |
 | `scripts/run_gcr_brink.py` | GCR step 1 on BRINK, official BRINK evaluator, faithful-path rate |
 | `scripts/reproduce_gcr_webqsp_gpu.sh` | Full two-step GCR reproduction on WebQSP (one GPU, no OpenAI key) |
 | `results/` | Small committed summaries (coverage, BRINK stats) |
@@ -30,6 +34,7 @@ bash scripts/setup.sh            # or: bash scripts/setup.sh gpu
 bash data_prep/download_brink.sh
 python data_prep/prepare_brink.py --dataset family
 python data_prep/prepare_brink.py --dataset fb15k237
+python data_prep/prepare_ikgqa.py --dataset webqsp     # and --dataset cwq (downloads ~370 MB)
 python scripts/run_gcr_brink.py --dataset family --version incomplete --split "test[:5]" \
   --model_path rmanluo/GCR-Qwen2-0.5B-Instruct --dtype fp32 --attn_implementation sdpa
 ```
@@ -71,6 +76,27 @@ Implications:
 - GCR constrains decoding only between `<PATH>` and `</PATH>`. In a 3-question smoke test with
   the 0.5B model on Family, 25 of 30 generated paths were real KG paths; the others were free
   text. `run_gcr_brink.py` reports this faithful-path rate.
+
+**IKGQA** (GoG, EMNLP 2024; `results/ikgqa_stats/`). GoG binds each question's gold SPARQL
+query, drops each entity pair on the bound answer paths with probability p, and deletes every
+relation between the pair in both directions, per question. `data_prep/prepare_ikgqa.py`
+applies these deletions to the question's RoG subgraph (what GCR reads); only 43% of GoG's
+crucial triples appear in WebQSP's RoG subgraphs (71% for CWQ); the rest were never visible to GCR.
+Hard KG-Trie ceiling = share of questions whose answer is on a <= 2-hop path from the topic entities:
+
+| Level | WebQSP: questions with deletions | WebQSP: ceiling, directed (GCR) | WebQSP: with inverse edges | CWQ: questions with deletions | CWQ: ceiling, directed (GCR) | CWQ: with inverse edges |
+| --- | --- | --- | --- | --- | --- | --- |
+| Full (IKG-0) | 0 | 97.8% | 97.8% | 0 | 78.7% | 78.7% |
+| IKG-20% | 481 | 92.4% | 95.0% | 534 | 67.8% | 72.3% |
+| IKG-40% | 650 | 88.4% | 92.5% | 760 | 60.4% | 66.6% |
+| IKG-60% | 823 | 80.5% | 87.9% | 901 | 50.9% | 61.4% |
+| IKG-80% | 899 | 74.5% | 84.5% | 956 | 47.6% | 59.8% |
+
+Each dataset: GoG's first 1,000 test questions, L = 2. Crucial triples present in RoG subgraphs: WebQSP 43%, CWQ 71%.
+CWQ needs up to 4 hops, so even the full graph caps a 2-hop trie at 78.7%.
+
+This is the headroom a soft decoder can target: at IKG-80% a hard trie cannot reach the
+answer for a quarter of WebQSP questions and half of CWQ questions.
 
 ## Reference numbers (GCR paper, WebQSP test)
 

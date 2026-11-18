@@ -17,6 +17,7 @@ clone_pinned () {  # url dir commit
 # Commits used for the results in results/ (Nov 2026).
 clone_pinned https://github.com/RManLuo/graph-constrained-reasoning.git graph-constrained-reasoning 9518e8e
 clone_pinned https://github.com/boschresearch/brink.git brink b95506d
+clone_pinned https://github.com/YaooXu/GoG.git GoG c0b2c36   # IKGQA crucial triples (data/webqsp, data/cwq)
 
 if [ ! -d .venv ]; then
   uv venv -p 3.12 .venv
