@@ -18,3 +18,4 @@ results/GenPaths*/
 results/KGQA*/
 results/gcr_brink/
 results/kg_trie_coverage/*.jsonl
+results/gcr_ikgqa/
