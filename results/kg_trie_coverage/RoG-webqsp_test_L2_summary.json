@@ -1,0 +1,13 @@
+{
+  "dataset": "rmanluo/RoG-webqsp",
+  "split": "test",
+  "L": 2,
+  "n_questions": 1628,
+  "no_trie_rate": 0.0006142506142506142,
+  "answer_in_subgraph_rate": 0.9563882063882064,
+  "hit_ceiling": 0.9563882063882064,
+  "recall_ceiling": 0.9405408740627363,
+  "mean_paths": 2520.16769041769,
+  "median_paths": 2296,
+  "mean_subgraph_triples": 4309.276412776413
+}

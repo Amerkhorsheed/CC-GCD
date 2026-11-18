@@ -1,0 +1,16 @@
+# Versions pinned to match GCR's pyproject.toml (transformers 4.44 for group beam search + prefix_allowed_tokens_fn).
+# torch is installed separately by scripts/setup.sh (CPU or CUDA wheel).
+transformers==4.44.2
+accelerate>=0.30.1,<0.34
+peft==0.11.1
+datasets>=2.19.2,<3
+pyarrow<18
+numpy<2
+marisa-trie>=1.2
+networkx>=3.2
+scikit-learn>=1.5
+sentencepiece>=0.2
+python-dotenv>=1.0
+tqdm>=4.66
+openai>=1.31,<2
+tiktoken>=0.7

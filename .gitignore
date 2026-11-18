@@ -1,0 +1,20 @@
+# Environments and caches
+.venv/
+.venv-gpu/
+.hf/
+__pycache__/
+*.pyc
+.env
+
+# Third-party code (cloned at pinned commits by scripts/setup.sh)
+third_party/
+
+# Data (re-created by data_prep/download_brink.sh and data_prep/prepare_brink.py)
+data/raw/
+data/processed/
+
+# Large run outputs; small summaries in results/*/ are committed
+results/GenPaths*/
+results/KGQA*/
+results/gcr_brink/
+results/kg_trie_coverage/*.jsonl
