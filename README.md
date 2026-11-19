@@ -98,6 +98,13 @@ CWQ needs up to 4 hops, so even the full graph caps a 2-hop trie at 78.7%.
 This is the headroom a soft decoder can target: at IKG-80% a hard trie cannot reach the
 answer for a quarter of WebQSP questions and half of CWQ questions.
 
+**GCR step 1, Qwen2-0.5B, RoG-WebQSP test[:200], CPU** (`results/gcr_webqsp/`): Hit 89.5, F1 37.2
+(P 32.3, R 70.3), answer recall within reach of the hard trie on this subset 92.9% (Hit ceiling 95.0%).
+1,688 of 2,000 generated paths (84.4%) are exact KG-Trie paths; nearly all others name entities
+that are not in the question's subgraph, i.e. beams that left the constraint. This is a smoke-scale
+check of the pipeline, not a reproduction: the paper reports no step-1-only number for 0.5B
+(8B step 1: F1 57.0, P 58.0, R 70.1). The full 8B run needs `scripts/reproduce_gcr_webqsp_gpu.sh`.
+
 ## Reference numbers (GCR paper, WebQSP test)
 
 | Setting | Hit | F1 |

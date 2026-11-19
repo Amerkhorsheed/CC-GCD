@@ -1,0 +1,11 @@
+{
+ "subset": "RoG-webqsp test[:200]",
+ "model": "rmanluo/GCR-Qwen2-0.5B-Instruct",
+ "setting": "step 1 only, L=2, k=10, group beam, CPU fp32",
+ "metrics": "Accuracy: 71.23510098443334 Hit: 89.5 F1: 37.18196033073658 Precision: 32.33293650793651 Recall: 70.2757086280841 Path F1: 30.623235972199787 Path Precision: 26.62242063492063 Path Recall: 62.81430392464527 Path Answer F1: 40.39560455034773 Path Answer Precision: 36.38035714285714 Path Answer Recall: 71.23214240455168",
+ "hit_ceiling_hard_trie": 0.95,
+ "recall_ceiling_hard_trie": 0.9285,
+ "paths_generated": 2000,
+ "paths_in_kg": 1688,
+ "faithful_path_rate": 0.844
+}
