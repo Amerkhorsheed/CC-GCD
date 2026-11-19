@@ -38,6 +38,7 @@ from tqdm import tqdm  # noqa: E402
 
 from cc_gcd.baselines.gcr import GCRRunner, faithful_rate, split_prediction, step1_answers  # noqa: E402
 from cc_gcd.calibration.kge_prior import KGEPrior  # noqa: E402
+from cc_gcd.calibration.observation_model import Encoded, features  # noqa: E402
 from cc_gcd.data.brink import BrinkKG  # noqa: E402
 from cc_gcd.graph.candidate_generator import CandidateGenerator  # noqa: E402
 from cc_gcd.kge.complex_kge import ComplExScorer, augment  # noqa: E402
@@ -69,10 +70,32 @@ def edge_scores(method: str, pi: np.ndarray, c_edge=None) -> tuple:
         z = np.log(pi) - np.log1p(-pi) + math.log(1 - c) - math.log(1 - F_DEFAULT)
         return float(arg[1]), log_sigmoid(z)
     if name == "CCe":
-        c = np.clip(c_edge, 0.02, 0.98)
+        c = np.asarray(c_edge, dtype=float)
+        if len(c) and np.isnan(c).any():  # guard: candidates are absent by construction, so this should not occur
+            c = np.where(np.isnan(c), np.nanmean(c) if (~np.isnan(c)).any() else 0.5, c)
+        c = np.clip(c, 0.02, 0.98)
         z = np.log(pi) - np.log1p(-pi) + np.log1p(-c) - math.log(1 - F_DEFAULT)
         return float(arg[1]), log_sigmoid(z)
     raise ValueError(method)
+
+
+def candidate_c(model_name: str, observed, edges_by_q: dict) -> dict:
+    """Per-edge c(e) for candidate edges: features of the canonical fact on the full observed graph
+    (deployment form; the candidate is absent, so nothing has to be excluded), scored by a saved model."""
+    import joblib
+    model = joblib.load(os.path.join(ROOT, "data", "observation", f"{model_name}.joblib"))
+    def canon(e):
+        h, r, t = e
+        return (t, r[1:], h) if r.startswith("~") else (h, r, t)
+    obs = sorted(set(observed))
+    obs_set = set(obs)
+    new = sorted({canon(e) for es in edges_by_q.values() for e in es} - obs_set)
+    enc = Encoded(obs + new)
+    kept = np.array([True] * len(obs) + [False] * len(new))
+    X = features(enc, kept, folds=1)[len(obs):]
+    c = model.predict(X, np.zeros(len(new), dtype=np.int64))
+    cmap = dict(zip(new, c))
+    return {q: np.array([cmap.get(canon(e), np.nan) for e in es]) for q, es in edges_by_q.items()}
 
 
 def main():
@@ -115,6 +138,14 @@ def main():
         cands[q["id"]] = {"edges": [x[:3] for x in c], "disp": disp, "pi": pi,
                           "true": {disp[i] for i, x in enumerate(c) if tuple(x[:3]) in removed}}
 
+    for name in {m.split(":")[1] for m in args.methods if m.startswith("CCe:")}:
+        cc = candidate_c(name, kg_obs.triples, {q: v["edges"] for q, v in cands.items()})
+        for q, v in cands.items():
+            v.setdefault("c", {})[name] = cc[q]
+        allc = np.concatenate([x for x in cc.values() if len(x)])
+        print(f"c(e) from {name}: mean {np.nanmean(allc):.3f}, p10 {np.nanpercentile(allc, 10):.3f}, "
+              f"p90 {np.nanpercentile(allc, 90):.3f}", flush=True)
+
     runner = GCRRunner(args.model_path, k=args.k, dtype=args.dtype, attn_implementation="sdpa", hops=2)
     gold_all = json.load(open(os.path.join(root, f"gold_{split}.json")))
     summary_path = os.path.join(ROOT, "results", "e1_brink", f"{args.dataset}_{args.split.replace(':', '-')}.json")
@@ -132,7 +163,8 @@ def main():
                 cq = cands[q["id"]]
                 s = kg.sample(q, hops=2, extra_edges=cq["edges"] if use_cands else None)
                 if lam is not None:
-                    _, sc = edge_scores(method, cq["pi"])
+                    c_edge = cq["c"][method.split(":")[1]] if method.startswith("CCe:") else None
+                    _, sc = edge_scores(method, cq["pi"], c_edge)
                     s["edge_scores"] = {e: float(v) for e, v in zip(cq["disp"], sc)}
                 yield s
 

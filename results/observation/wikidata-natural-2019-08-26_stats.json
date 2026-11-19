@@ -1,0 +1,84 @@
+{
+  "t0": "2019-08-26",
+  "old_dump": "20190826",
+  "new_dump": "20261117",
+  "min_old_uses": 20,
+  "properties_dropped_rare_at_t0": 229,
+  "items_new_stream": 14316,
+  "items_old_stream": 13784,
+  "mid_qid_pairs_new": 14316,
+  "one_to_one_new": 14148,
+  "universe": 13631,
+  "one_to_one_not_in_old_with_same_mid": 517,
+  "labelled_facts_true_now": 164082,
+  "recorded_at_t0": 0.7895,
+  "observable_at_t0_not_true_now": 9507,
+  "dropped_not_yet_true": {
+    "start_after_t0": 344,
+    "point_in_time_after_t0": 567,
+    "property_rare_at_t0": 2692
+  },
+  "relations_labelled": 134,
+  "top_relations": [
+    [
+      "P106",
+      15157
+    ],
+    [
+      "P161",
+      13199
+    ],
+    [
+      "P1411",
+      8662
+    ],
+    [
+      "P136",
+      7899
+    ],
+    [
+      "P530",
+      6693
+    ],
+    [
+      "P17",
+      6659
+    ],
+    [
+      "P166",
+      5738
+    ],
+    [
+      "P1412",
+      4976
+    ],
+    [
+      "P27",
+      4928
+    ],
+    [
+      "P190",
+      4517
+    ],
+    [
+      "P495",
+      3737
+    ],
+    [
+      "P47",
+      3606
+    ],
+    [
+      "P69",
+      3205
+    ],
+    [
+      "P19",
+      3129
+    ],
+    [
+      "P1346",
+      3015
+    ]
+  ]
+}
