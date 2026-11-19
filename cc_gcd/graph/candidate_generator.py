@@ -14,7 +14,7 @@ Relation ranking (``rel_rank``):
     "kge"       score(u, r) = best raw KGE score among admissible absent tails of (u, r).
                 Raw ComplEx scores are not comparable across relations; kept as an ablation.
     "kge_prob"  score(u, r) = log P(best admissible absent tail | u, r) under the model's
-                1-vs-all softmax over all tails (observed tails included in the normalizer).
+                softmax over all tails (observed tails included in the normalizer).
     "cooc"      score(u, r) = max over relations r' observed at u of
                 P(an entity has r | it has r'), from the observed graph
                 (relation co-occurrence, in the spirit of Galarraga et al. 2017).
@@ -24,23 +24,32 @@ uncalibrated input for the plausibility prior pi(e) (calibration/kge_prior.py, n
 
 Signature filter (``signature_filter``): a relation r is admissible for u only if
 cooc(u, r) > tau, and a tail v is admissible for r only if cooc(v, ~r) > tau,
-i.e. some entity with v's observed relations also has ~r. BRINK ships no trusted
-ontology, so this is a data-derived *candidate filter*, not the -inf ontology
-mask of plan section 4.2 (an unknown type is never treated as a violation there).
+i.e. some entity with v's observed relations also has ~r. BRINK and the RoG
+subgraphs ship no trusted ontology, so this is a data-derived *candidate filter*,
+not the -inf ontology mask of plan section 4.2 (an unknown type is never a violation there).
+
+Scale. Signatures are sparse (entity x relation), co-occurrence is a dense
+relation x relation matrix, and the cooc rows and range masks are computed on
+demand, so the module runs on BRINK (15k entities, 474 relations) and on the
+IKGQA-WebQSP union graph (599k entities, 10k relations) alike. ``build`` can be
+restricted to the entities that need candidates (``entities``) and, for the KGE
+rankings, to the ``rel_pool`` relations with the highest cooc per entity. With
+both left at None the result equals scoring every entity and relation.
 
 Everything is computed from the observed graph and a KGE trained on it, never
-from removed triples or test questions. ``build`` runs once per graph on the
-GPU and stores the top R_max x k_max table; R and k are sliced at query time.
+from removed triples or test questions. ``build`` runs on the GPU and stores the
+top R_max x k_max table; R and k are sliced at query time.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from collections import defaultdict
-from typing import AbstractSet, Dict, Iterable, List, Sequence, Tuple
+from collections import OrderedDict, defaultdict
+from typing import AbstractSet, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
+import scipy.sparse as sp
 import torch
 
 from cc_gcd.kge.complex_kge import ComplExScorer, augment, inverse
@@ -59,43 +68,69 @@ class Candidate(tuple):
 
 class CandidateGenerator:
     def __init__(self, triples: Sequence[Triple], scorer: ComplExScorer, *, rel_rank: str = "kge",
-                 signature_filter: bool = True, tau: float = 0.0, R_max: int = 10, k_max: int = 20):
+                 signature_filter: bool = True, tau: float = 0.0, R_max: int = 10, k_max: int = 20,
+                 rel_pool: Optional[int] = None):
         if rel_rank not in RELATION_RANKINGS:
             raise ValueError(f"rel_rank must be one of {RELATION_RANKINGS}")
         self.sc = scorer
+        self.dev = scorer.device
         self.rel_rank, self.signature_filter, self.tau = rel_rank, signature_filter, tau
-        self.R_max, self.k_max = R_max, k_max
+        self.R_max, self.k_max, self.rel_pool = R_max, k_max, rel_pool
         E, Rr = len(scorer.entities), len(scorer.relations)
         self.E, self.Rr = E, Rr
         self.inv_rel = torch.tensor([scorer.r2id[inverse(r)] for r in scorer.relations])
 
         # Observed inverse-augmented adjacency, by id.
-        self.obs: Dict[Tuple[int, int], np.ndarray] = {}
         tmp: Dict[Tuple[int, int], List[int]] = defaultdict(list)
         for h, r, t in set(augment(triples)):
             tmp[(scorer.e2id[h], scorer.r2id[r])].append(scorer.e2id[t])
-        self.obs = {k: np.asarray(v, dtype=np.int64) for k, v in tmp.items()}
+        self.obs: Dict[Tuple[int, int], np.ndarray] = {k: np.asarray(v, dtype=np.int64) for k, v in tmp.items()}
 
-        # Relation signatures and co-occurrence confidence conf[r', r] = P(has r | has r').
-        M = torch.zeros(E, Rr)
-        for (u, r) in self.obs:
-            M[u, r] = 1.0
-        co = M.T @ M
-        conf = co / co.diag().clamp(min=1).unsqueeze(1)
-        self.cooc = self._max_product(M, conf)  # (E, Rr) on CPU, float32
-        self._range_ok = (self.cooc.T > self.tau)  # (Rr, E): v's signature is compatible with relation
+        # Sparse relation signatures M (E x Rr) and co-occurrence confidence conf[r', r] = P(has r | has r').
+        keys = np.array(list(self.obs.keys()), dtype=np.int64).reshape(-1, 2)
+        self.M = sp.csr_matrix((np.ones(len(keys), dtype=np.float32), (keys[:, 0], keys[:, 1])), shape=(E, Rr))
+        co = (self.M.T @ self.M).toarray()
+        conf = co / np.maximum(np.diag(co), 1)[:, None]
+        self.conf = torch.from_numpy(conf.astype(np.float32)).to(self.dev)
+        # Tie-break order for cooc: every relation u already has scores cooc = 1, so ties are common
+        # (10th-best == best for 20% of Family and 40% of FB15k-237 entities). Ties go to the relation
+        # held by more entities, deterministically and without the KGE.
+        freq = np.asarray(self.M.sum(0)).ravel()
+        self._rel_order = torch.from_numpy(np.argsort(-freq, kind="stable")).to(self.dev)
+        self._range_cache: "OrderedDict[int, torch.Tensor]" = OrderedDict()
+        # (E,) bool range masks kept on the GPU, up to ~500 MB: every relation on BRINK, ~800 on IKGQA.
+        self._range_cache_size = max(256, int(5e8 // E))
         self.table: dict = {}
+        self.row: Dict[int, int] = {}
 
-    # ------------------------------------------------------------------ build
-    @staticmethod
-    def _max_product(M: torch.Tensor, conf: torch.Tensor, chunk: int = 64) -> torch.Tensor:
-        out = torch.empty_like(M)
-        dev = "cuda" if torch.cuda.is_available() else "cpu"
-        conf_d = conf.to(dev)
-        for i in range(0, M.shape[0], chunk):
-            m = M[i:i + chunk].to(dev)
-            out[i:i + chunk] = (m.unsqueeze(2) * conf_d.unsqueeze(0)).amax(1).cpu()
+    # ------------------------------------------------------------------ signatures
+    def cooc_rows(self, us: Sequence[int]) -> torch.Tensor:
+        """(len(us), Rr) cooc scores: max over u's observed relations r' of conf[r', r]."""
+        out = torch.zeros(len(us), self.Rr, device=self.dev)
+        for i, u in enumerate(us):
+            rels = self.M.indices[self.M.indptr[u]:self.M.indptr[u + 1]]
+            if len(rels):
+                out[i] = self.conf[torch.from_numpy(rels).to(self.dev)].amax(0)
         return out
+
+    def top_relations(self, cooc: torch.Tensor, domain: torch.Tensor, n: int):
+        """Top-n relations per row by cooc (domain-masked), ties broken by relation frequency."""
+        key = cooc.masked_fill(~domain, -torch.inf)[:, self._rel_order]
+        vals, idx = torch.sort(key, dim=1, descending=True, stable=True)
+        return vals[:, :n], self._rel_order[idx[:, :n]]
+
+    def range_ok(self, r: int) -> torch.Tensor:
+        """(E,) bool: v's signature is compatible with tails of r, i.e. cooc(v, ~r) > tau."""
+        hit = self._range_cache.get(r)
+        if hit is None:
+            allowed = (self.conf[:, self.inv_rel[r]] > self.tau).cpu().numpy()
+            hit = torch.from_numpy(np.asarray(self.M[:, allowed].sum(1)).ravel() > 0).to(self.dev)
+            self._range_cache[r] = hit
+            if len(self._range_cache) > self._range_cache_size:
+                self._range_cache.popitem(last=False)
+        else:
+            self._range_cache.move_to_end(r)
+        return hit
 
     def _admissible(self, us: torch.Tensor, rs: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
         """Mask observed tails, self loops and (optionally) signature-incompatible tails with -inf."""
@@ -110,83 +145,133 @@ class CandidateGenerator:
             scores[torch.from_numpy(np.concatenate(rows)).to(dev), torch.from_numpy(np.concatenate(cols)).to(dev)] = -torch.inf
         scores[torch.arange(len(us), device=dev), us.to(dev)] = -torch.inf
         if self.signature_filter:
-            range_ok = self._range_ok[self.inv_rel[rs]].to(dev)  # (B, E): cooc(v, ~r) > tau
-            scores.masked_fill_(~range_ok, -torch.inf)
+            mask = torch.stack([self.range_ok(r) for r in rs.tolist()])
+            scores.masked_fill_(~mask, -torch.inf)
         return scores
 
+    def _scores(self, u: torch.Tensor, r: torch.Tensor):
+        raw = self.sc.score_tails(u.to(self.dev), r.to(self.dev))
+        lse = torch.logsumexp(raw, dim=1, keepdim=True)  # over *all* tails, observed ones included
+        return self._admissible(u, r, raw), lse
+
+    # ------------------------------------------------------------------ build
     @torch.no_grad()
-    def build(self, batch_pairs: int = 2048, progress=None) -> dict:
-        E, Rr, Rm, km = self.E, self.Rr, self.R_max, self.k_max
-        domain_ok = self.cooc > self.tau if self.signature_filter else torch.ones(E, Rr, dtype=torch.bool)
+    def build(self, entities: Optional[Iterable[str]] = None, max_pairs: int = 0, progress=None) -> dict:
+        """Top R_max relations x top k_max absent tails for ``entities`` (default: every entity).
 
-        rel = np.full((E, Rm), -1, dtype=np.int32)
-        rel_score = np.full((E, Rm), -np.inf, dtype=np.float32)
-        tail = np.full((E, Rm, km), -1, dtype=np.int32)
-        tail_score = np.full((E, Rm, km), -np.inf, dtype=np.float32)
-        tail_logp = np.full((E, Rm, km), -np.inf, dtype=np.float32)
+        ``max_pairs`` bounds the (u, r) queries scored at once ((pairs x E) floats); 0 = automatic.
+        """
+        Rm, km, Rr = self.R_max, self.k_max, self.Rr
+        ids = list(range(self.E)) if entities is None else sorted({self.sc.e2id[e] for e in entities if e in self.sc.e2id})
+        n = len(ids)
+        max_pairs = max_pairs or int(max(16, min(2048, 2.5e7 // self.E)))
+        rel = np.full((n, Rm), -1, dtype=np.int32)
+        rel_score = np.full((n, Rm), -np.inf, dtype=np.float32)
+        tail = np.full((n, Rm, km), -1, dtype=np.int32)
+        tail_score = np.full((n, Rm, km), -np.inf, dtype=np.float32)
+        tail_logp = np.full((n, Rm, km), -np.inf, dtype=np.float32)
 
-        def scores(u, r):
-            raw = self.sc.score_tails(u.to(self.sc.device), r.to(self.sc.device))
-            lse = torch.logsumexp(raw, dim=1, keepdim=True)  # over *all* tails, observed ones included
-            return self._admissible(u, r, raw), lse
-
-        if self.rel_rank == "cooc":
-            s = self.cooc.clone()
-            s[~domain_ok] = -torch.inf
-            top = s.topk(min(Rm, Rr), dim=1)
-            pairs_u = torch.arange(E).repeat_interleave(top.indices.shape[1])
-            pairs_r = top.indices.reshape(-1)
-            rel[:, :top.indices.shape[1]] = top.indices.numpy()
-            rel_score[:, :top.indices.shape[1]] = top.values.numpy()
-            it = range(0, len(pairs_u), batch_pairs)
-            for i in (progress(it) if progress else it):
-                u, r = pairs_u[i:i + batch_pairs], pairs_r[i:i + batch_pairs]
-                sc, lse = scores(u, r)
-                tv = sc.topk(km, dim=1)
-                flat = np.arange(i, i + len(u))
-                tail.reshape(-1, km)[flat] = tv.indices.cpu().numpy()
-                tail_score.reshape(-1, km)[flat] = tv.values.cpu().numpy()
-                tail_logp.reshape(-1, km)[flat] = (tv.values - lse).cpu().numpy()
-        else:  # KGE-based: score every (u, r), keep the R_max relations with the best admissible tail
-            U = max(1, batch_pairs // Rr)
-            it = range(0, E, U)
-            log_cooc = torch.log(self.cooc.clamp(min=1e-12))
-            for i in (progress(it) if progress else it):
-                us = torch.arange(i, min(i + U, E))
-                u = us.repeat_interleave(Rr)
-                r = torch.arange(Rr).repeat(len(us))
-                sc, lse = scores(u, r)
-                tv = sc.topk(km, dim=1)
-                vals = tv.values.view(len(us), Rr, km)
-                logp = (tv.values - lse).view(len(us), Rr, km)
-                idx = tv.indices.view(len(us), Rr, km)
-                if self.rel_rank == "kge":  # raw score of the best absent tail
-                    key = vals[:, :, 0]
-                elif self.rel_rank == "kge_prob":  # log P(best absent tail | u, r) under the 1-vs-all softmax
-                    key = logp[:, :, 0]
-                else:  # "hybrid": log cooc(u, r) + log P(best absent tail | u, r)
-                    key = logp[:, :, 0] + log_cooc[us].to(logp.device)
-                best = key.masked_fill(~domain_ok[us].to(vals.device), -torch.inf)
-                rt = best.topk(min(Rm, Rr), dim=1)
-                g = rt.indices.unsqueeze(2).expand(-1, -1, km)
-                rel[i:i + len(us), :rt.indices.shape[1]] = rt.indices.cpu().numpy()
-                rel_score[i:i + len(us), :rt.indices.shape[1]] = rt.values.cpu().numpy()
-                tail[i:i + len(us), :rt.indices.shape[1]] = idx.gather(1, g).cpu().numpy()
-                tail_score[i:i + len(us), :rt.indices.shape[1]] = vals.gather(1, g).cpu().numpy()
-                tail_logp[i:i + len(us), :rt.indices.shape[1]] = logp.gather(1, g).cpu().numpy()
+        U = max(1, max_pairs // self._pairs_per_entity())
+        it = range(0, n, U)
+        for i in (progress(it) if progress else it):
+            out = self._build_chunk(ids[i:i + U])
+            c, w = out[0].shape
+            rel[i:i + c, :w], rel_score[i:i + c, :w] = out[0], out[1]
+            tail[i:i + c, :w], tail_score[i:i + c, :w], tail_logp[i:i + c, :w] = out[2], out[3], out[4]
 
         # Domain-filtered relations and fully masked tails contribute nothing.
         rel[~np.isfinite(rel_score)] = -1
         tail[rel < 0] = -1
         tail[~np.isfinite(tail_score)] = -1
-        self.table = {"rel": rel, "rel_score": rel_score, "tail": tail, "tail_score": tail_score,
-                      "tail_logp": tail_logp}
+        self.table = {"ent": np.asarray(ids, dtype=np.int64), "rel": rel, "rel_score": rel_score, "tail": tail,
+                      "tail_score": tail_score, "tail_logp": tail_logp}
+        self.row = {e: j for j, e in enumerate(ids)}
         return self.table
+
+    def _pairs_per_entity(self) -> int:
+        if self.rel_rank == "cooc":
+            return self.R_max
+        return self.Rr if self.rel_pool is None else min(self.rel_pool, self.Rr)
+
+    def _build_chunk(self, chunk: Sequence[int], allowed: Optional[torch.Tensor] = None):
+        """Top relations x top tails for a chunk of entity ids; ``allowed`` (E,) bool restricts tails."""
+        Rm, km, Rr = self.R_max, self.k_max, self.Rr
+        pool = self._pairs_per_entity()
+        cooc = self.cooc_rows(chunk)  # (c, Rr)
+        domain = cooc > self.tau if self.signature_filter else torch.ones_like(cooc, dtype=torch.bool)
+        if self.rel_rank == "cooc":
+            key_extra, r_cand = self.top_relations(cooc, domain, min(Rm, Rr))  # (c, Rm)
+        elif pool < Rr:  # KGE rankings over the relations with the highest cooc
+            key_extra, r_cand = None, self.top_relations(cooc, domain, pool)[1]
+        else:
+            key_extra, r_cand = None, torch.arange(Rr, device=self.dev).repeat(len(chunk), 1)
+        c, P = r_cand.shape
+        u = torch.tensor(list(chunk)).repeat_interleave(P)
+        r = r_cand.reshape(-1).cpu()
+        sc, lse = self._scores(u, r)
+        if allowed is not None:
+            sc.masked_fill_(~allowed.to(sc.device).unsqueeze(0), -torch.inf)
+        tv = sc.topk(km, dim=1)
+        vals = tv.values.view(c, P, km)
+        logp = (tv.values - lse).view(c, P, km)
+        idx = tv.indices.view(c, P, km)
+        dom = domain.gather(1, r_cand)
+        if self.rel_rank == "cooc":
+            key = key_extra
+        elif self.rel_rank == "kge":  # raw score of the best absent tail
+            key = vals[:, :, 0]
+        elif self.rel_rank == "kge_prob":  # log P(best absent tail | u, r)
+            key = logp[:, :, 0]
+        else:  # "hybrid": log cooc(u, r) + log P(best absent tail | u, r)
+            key = logp[:, :, 0] + torch.log(cooc.gather(1, r_cand).clamp(min=1e-12))
+        key = key.masked_fill(~dom, -torch.inf)
+        if self.rel_rank == "cooc":  # already in tie-broken order; topk would reshuffle ties
+            pos = -torch.arange(P, device=key.device, dtype=key.dtype).expand(c, P)
+            top_idx = pos.masked_fill(~torch.isfinite(key), -torch.inf).topk(min(Rm, P), dim=1).indices
+        else:
+            top_idx = key.topk(min(Rm, P), dim=1).indices
+        g = top_idx.unsqueeze(2).expand(-1, -1, km)
+        return (r_cand.gather(1, top_idx).cpu().numpy(), key.gather(1, top_idx).cpu().numpy(),
+                idx.gather(1, g).cpu().numpy(), vals.gather(1, g).cpu().numpy(), logp.gather(1, g).cpu().numpy())
+
+    @torch.no_grad()
+    def local_table(self, u: str, allowed_entities: Iterable[str]) -> Optional[dict]:
+        """Like one row of ``build`` but tails are restricted to ``allowed_entities`` (e.g. the
+        question's observed subgraph). Relation ranking uses the best *allowed* tail. None if u is unknown."""
+        ui = self.sc.e2id.get(u)
+        if ui is None:
+            return None
+        allowed = torch.zeros(self.E, dtype=torch.bool, device=self.dev)
+        ids = [self.sc.e2id[e] for e in allowed_entities if e in self.sc.e2id]
+        if ids:
+            allowed[torch.tensor(ids, device=self.dev)] = True
+        rel, rel_score, tail, tail_score, tail_logp = (x[0] for x in self._build_chunk([ui], allowed))
+        rel[~np.isfinite(rel_score)] = -1
+        tail[rel < 0] = -1
+        tail[~np.isfinite(tail_score)] = -1
+        return {"rel": rel, "tail": tail, "tail_score": tail_score, "tail_logp": tail_logp}
+
+    def candidates_from(self, u: str, row: Optional[dict], R: int, k: int) -> List[Candidate]:
+        """Slice a ``local_table`` row at (R, k)."""
+        if row is None:
+            return []
+        out = []
+        for a in range(min(R, len(row["rel"]))):
+            ri = int(row["rel"][a])
+            if ri < 0:
+                continue
+            for b in range(min(k, row["tail"].shape[1])):
+                vi = int(row["tail"][a, b])
+                if vi < 0:
+                    break
+                out.append(Candidate(u, self.sc.relations[ri], self.sc.entities[vi], float(row["tail_score"][a, b]), a, b))
+        return out
 
     # ------------------------------------------------------------------ io
     def config(self) -> dict:
         return {"rel_rank": self.rel_rank, "signature_filter": self.signature_filter, "tau": self.tau,
-                "R_max": self.R_max, "k_max": self.k_max}
+                "R_max": self.R_max, "k_max": self.k_max, "rel_pool": self.rel_pool,
+                "entities_built": int(len(self.table.get("ent", [])))}
 
     def save(self, path: str) -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -197,27 +282,35 @@ class CandidateGenerator:
     def load(self, path: str) -> "CandidateGenerator":
         z = np.load(path)
         self.table = {k: z[k] for k in z.files}
+        if "ent" not in self.table:  # tables written before subset builds cover every entity
+            self.table["ent"] = np.arange(self.table["rel"].shape[0])
+        self.row = {int(e): j for j, e in enumerate(self.table["ent"])}
         return self
 
     # ------------------------------------------------------------------ query
     def candidates(self, u: str, R: int, k: int) -> List[Candidate]:
         """Absent edges (u, r, v) for the top-R relations and top-k tails, canonical ids."""
-        ui = self.sc.e2id.get(u)
-        if ui is None:
+        j = self.row.get(self.sc.e2id.get(u, -1))
+        if j is None:
             return []
         T = self.table
         out = []
         for a in range(min(R, self.R_max)):
-            ri = int(T["rel"][ui, a])
+            ri = int(T["rel"][j, a])
             if ri < 0:
                 continue
             r = self.sc.relations[ri]
             for b in range(min(k, self.k_max)):
-                vi = int(T["tail"][ui, a, b])
+                vi = int(T["tail"][j, a, b])
                 if vi < 0:
                     break
-                out.append(Candidate(u, r, self.sc.entities[vi], float(T["tail_score"][ui, a, b]), a, b))
+                out.append(Candidate(u, r, self.sc.entities[vi], float(T["tail_score"][j, a, b]), a, b))
         return out
+
+    def count(self, R: int, k: int) -> Dict[str, int]:
+        """Number of candidates per built entity at (R, k)."""
+        n = (self.table["tail"][:, :R, :k] >= 0).sum((1, 2))
+        return {self.sc.entities[e]: int(c) for e, c in zip(self.table["ent"], n)}
 
     def expand(self, seeds: Iterable[str], adj: Dict[str, List[Tuple[str, str]]], R: int, k: int,
                cand_hops: AbstractSet[int] = frozenset({1}), hops: int = 2) -> List[Candidate]:
@@ -241,14 +334,16 @@ class CandidateGenerator:
     def tail_rank(self, u: str, r: str, v: str) -> int:
         """Filtered 0-based rank of v among admissible absent tails of (u, r); -1 if v is masked."""
         ui, ri, vi = self.sc.e2id[u], self.sc.r2id[r], self.sc.e2id[v]
-        us, rs = torch.tensor([ui]), torch.tensor([ri])
-        s = self._admissible(us, rs, self.sc.score_tails(us.to(self.sc.device), rs.to(self.sc.device)))[0]
+        s, _ = self._scores(torch.tensor([ui]), torch.tensor([ri]))
+        s = s[0]
         if not torch.isfinite(s[vi]):
             return -1
         return int((s > s[vi]).sum().item())
 
     def relation_rank(self, u: str, r: str) -> int:
-        """0-based rank of r among u's stored relations; -1 if r is outside the top R_max."""
-        ui, ri = self.sc.e2id[u], self.sc.r2id[r]
-        hit = np.where(self.table["rel"][ui] == ri)[0]
+        """0-based rank of r among u's stored relations; -1 if r is outside the top R_max or u was not built."""
+        j = self.row.get(self.sc.e2id[u])
+        if j is None:
+            return -1
+        hit = np.where(self.table["rel"][j] == self.sc.r2id[r])[0]
         return int(hit[0]) if len(hit) else -1

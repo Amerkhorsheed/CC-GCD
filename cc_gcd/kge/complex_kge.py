@@ -48,11 +48,11 @@ def augment(triples: Sequence[Triple]) -> List[Triple]:
 
 
 class _ComplEx(torch.nn.Module):
-    def __init__(self, n_ent: int, n_rel: int, dim: int, init_scale: float = 1e-3):
+    def __init__(self, n_ent: int, n_rel: int, dim: int, init_scale: float = 1e-3, sparse: bool = False):
         super().__init__()
         # Real and imaginary parts stored side by side: [re | im].
-        self.ent = torch.nn.Embedding(n_ent, 2 * dim)
-        self.rel = torch.nn.Embedding(n_rel, 2 * dim)
+        self.ent = torch.nn.Embedding(n_ent, 2 * dim, sparse=sparse)
+        self.rel = torch.nn.Embedding(n_rel, 2 * dim, sparse=sparse)
         self.ent.weight.data *= init_scale
         self.rel.weight.data *= init_scale
         self.dim = dim
@@ -66,10 +66,20 @@ class _ComplEx(torch.nn.Module):
         scores = qr @ E[:, :d].T + qi @ E[:, d:].T
         return scores, (torch.sqrt(lr ** 2 + li ** 2), torch.sqrt(rr ** 2 + ri ** 2))
 
+    def score_candidates(self, h: torch.Tensor, r: torch.Tensor, cand: torch.Tensor):
+        """Scores against a candidate subset of tails (sampled softmax); gradients stay sparse."""
+        d = self.dim
+        lhs, rel, C = self.ent(h), self.rel(r), self.ent(cand)
+        lr, li, rr, ri = lhs[:, :d], lhs[:, d:], rel[:, :d], rel[:, d:]
+        qr, qi = lr * rr - li * ri, lr * ri + li * rr
+        scores = qr @ C[:, :d].T + qi @ C[:, d:].T
+        return scores, (torch.sqrt(lr ** 2 + li ** 2), torch.sqrt(rr ** 2 + ri ** 2))
+
 
 @torch.no_grad()
 def _filtered_ranks(model: _ComplEx, triples: np.ndarray, known: Dict[Tuple[int, int], List[int]],
-                    device: str, batch: int = 512) -> np.ndarray:
+                    device: str, batch: int = 0) -> np.ndarray:
+    batch = batch or int(min(512, max(16, 5e7 // model.ent.num_embeddings)))  # (batch x E) fp32 scores <= 200 MB
     ranks = []
     for i in range(0, len(triples), batch):
         b = torch.as_tensor(triples[i:i + batch], device=device)
@@ -88,8 +98,17 @@ def _filtered_ranks(model: _ComplEx, triples: np.ndarray, known: Dict[Tuple[int,
 
 def train_complex(triples: Sequence[Triple], out_dir: str, *, dim: int = 256, epochs: int = 100, lr: float = 0.1,
                   batch_size: int = 512, reg_weight: float = 5e-2, valid_frac: float = 0.02, patience: int = 3,
-                  eval_every: int = 5, seed: int = 0, device: str = "cuda", log=print) -> dict:
-    """Train reciprocal ComplEx-N3 on observed triples; keep the best epoch by holdout filtered MRR."""
+                  eval_every: int = 5, seed: int = 0, device: str = "cuda", amp: bool = False,
+                  neg_sample: int = 0, log=print) -> dict:
+    """Train reciprocal ComplEx-N3 on observed triples; keep the best epoch by holdout filtered MRR.
+
+    ``amp`` runs the score matmul in bf16 (loss and N3 stay fp32). ``neg_sample`` > 0 replaces
+    1-vs-all with a sampled softmax: each batch scores its true tails plus ``neg_sample`` shared
+    uniform entities, and embeddings get sparse gradients. With uniform sampling the softmax
+    correction is a constant, so the objective keeps its form. Needed when the full entity table's
+    dense gradient and score matrices do not fit next to the desktop on the 8 GB RTX 3060 Ti
+    (IKGQA-WebQSP: 599k entities). Evaluation always ranks against every entity.
+    """
     torch.manual_seed(seed)
     os.makedirs(out_dir, exist_ok=True)
     canon = sorted(set(map(tuple, triples)))
@@ -112,7 +131,8 @@ def train_complex(triples: Sequence[Triple], out_dir: str, *, dim: int = 256, ep
     for h, r, t in np.concatenate([tr, va]):
         known[(int(h), int(r))].append(int(t))
 
-    model = _ComplEx(len(entities), len(relations), dim).to(device)
+    model = _ComplEx(len(entities), len(relations), dim, sparse=neg_sample > 0).to(device)
+    E_n = len(entities)
     opt = torch.optim.Adagrad(model.parameters(), lr=lr)
     tr_t = torch.as_tensor(tr, device=device)
     best, best_state, best_epoch, bad, t0, history = -1.0, None, 0, 0, time.time(), []
@@ -122,10 +142,24 @@ def train_complex(triples: Sequence[Triple], out_dir: str, *, dim: int = 256, ep
         total = 0.0
         for i in range(0, len(perm), batch_size):
             b = tr_t[perm[i:i + batch_size]]
-            scores, (fl, fr) = model(b[:, 0], b[:, 1])
+            if neg_sample:
+                cand = torch.cat([b[:, 2], torch.randint(0, E_n, (neg_sample,), device=device)])
+                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
+                    scores, (fl, fr) = model.score_candidates(b[:, 0], b[:, 1], cand)
+                scores = scores.float()
+                # Row j's target sits at column j; any other column holding the same entity is not a negative.
+                dup = cand.unsqueeze(0) == b[:, 2].unsqueeze(1)
+                dup[torch.arange(len(b), device=device), torch.arange(len(b), device=device)] = False
+                scores = scores.masked_fill(dup, -torch.inf)
+                target = torch.arange(len(b), device=device)
+            else:
+                with torch.autocast("cuda", dtype=torch.bfloat16, enabled=amp):
+                    scores, (fl, fr) = model(b[:, 0], b[:, 1])
+                scores = scores.float()
+                target = b[:, 2]
             ft = model.ent(b[:, 2])
             ft = torch.sqrt(ft[:, :dim] ** 2 + ft[:, dim:] ** 2)
-            loss = torch.nn.functional.cross_entropy(scores, b[:, 2])
+            loss = torch.nn.functional.cross_entropy(scores, target)
             reg = reg_weight * (fl ** 3 + fr ** 3 + ft ** 3).sum() / len(b)
             opt.zero_grad()
             (loss + reg).backward()
@@ -138,7 +172,7 @@ def train_complex(triples: Sequence[Triple], out_dir: str, *, dim: int = 256, ep
             log(f"epoch {epoch}: train CE {total / len(tr):.4f}, holdout filtered MRR {mrr:.4f}")
             if mrr > best + 1e-4:
                 best, best_epoch, bad = mrr, epoch, 0
-                best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+                best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
             else:
                 bad += 1
                 if bad >= patience:
@@ -154,7 +188,7 @@ def train_complex(triples: Sequence[Triple], out_dir: str, *, dim: int = 256, ep
     with open(os.path.join(out_dir, "vocab.json"), "w") as f:
         json.dump({"entities": entities, "relations": relations}, f)
     metrics = {
-        "model": "ComplEx-N3 (reciprocal, 1-vs-all CE, Adagrad)", "dim": dim, "lr": lr, "batch_size": batch_size,
+        "model": "ComplEx-N3 (reciprocal, " + (f"sampled softmax {neg_sample}" if neg_sample else "1-vs-all") + " CE, Adagrad)", "dim": dim, "amp_bf16": amp, "neg_sample": neg_sample, "lr": lr, "batch_size": batch_size,
         "reg_weight_n3": reg_weight, "seed": seed, "epochs_max": epochs, "best_epoch": best_epoch,
         "train_seconds": round(time.time() - t0, 1),
         "train_triples_canonical": len(train_c), "valid_triples_canonical": len(valid_c),

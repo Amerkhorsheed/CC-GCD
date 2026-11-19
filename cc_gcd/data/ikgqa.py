@@ -52,6 +52,21 @@ class IKGQA:
         with open(os.path.join(self.root, f"{level_tag(p)}.jsonl"), encoding="utf-8") as f:
             return [json.loads(line) for line in f]
 
+    def kge_graph(self) -> List[tuple]:
+        """Observed graph for KGE training and candidate generation, leak-free for every level.
+
+        IKGQA deletes per question, and ~62% of a level's deleted triples also occur in
+        another question's RoG subgraph, so a plain union of subgraphs would hand the KGE
+        the very facts it must recover. This returns the union of the IKGQA questions'
+        subgraphs minus every triple deleted for any question at any level (11,655 of
+        1.75M on WebQSP). One model then serves all levels.
+        """
+        deleted = {tuple(t) for p in LEVELS for rec in self.removals(p) for t in rec["removed_triples"]}
+        union = set()
+        for rec in self.removals(0.0):
+            union.update(tuple(t) for t in self.rog[rec["rog_idx"]]["graph"])
+        return sorted(union - deleted)
+
     def samples(self, p: float) -> Iterator[dict]:
         """RoG-format samples (id, question, q_entity, a_entity, answer, graph) with IKG deletions applied."""
         for rec in self.removals(p):

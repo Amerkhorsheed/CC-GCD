@@ -1,0 +1,124 @@
+{
+  "model": "ComplEx-N3 (reciprocal, sampled softmax 16384 CE, Adagrad)",
+  "dim": 200,
+  "amp_bf16": true,
+  "neg_sample": 16384,
+  "lr": 0.1,
+  "batch_size": 1024,
+  "reg_weight_n3": 0.01,
+  "seed": 0,
+  "epochs_max": 40,
+  "best_epoch": 40,
+  "train_seconds": 1754.3,
+  "train_triples_canonical": 1705763,
+  "valid_triples_canonical": 34811,
+  "entities": 598210,
+  "relations_with_inverse": 10352,
+  "valid_mrr": 0.6168,
+  "valid_hits@1": 0.5814,
+  "valid_hits@10": 0.6778,
+  "history": [
+    {
+      "epoch": 2,
+      "train_ce": 1.2231,
+      "valid_mrr": 0.5808
+    },
+    {
+      "epoch": 4,
+      "train_ce": 0.905,
+      "valid_mrr": 0.598
+    },
+    {
+      "epoch": 6,
+      "train_ce": 0.8423,
+      "valid_mrr": 0.6036
+    },
+    {
+      "epoch": 8,
+      "train_ce": 0.812,
+      "valid_mrr": 0.6065
+    },
+    {
+      "epoch": 10,
+      "train_ce": 0.7939,
+      "valid_mrr": 0.6086
+    },
+    {
+      "epoch": 12,
+      "train_ce": 0.7809,
+      "valid_mrr": 0.6099
+    },
+    {
+      "epoch": 14,
+      "train_ce": 0.7712,
+      "valid_mrr": 0.6107
+    },
+    {
+      "epoch": 16,
+      "train_ce": 0.7638,
+      "valid_mrr": 0.6115
+    },
+    {
+      "epoch": 18,
+      "train_ce": 0.7578,
+      "valid_mrr": 0.6115
+    },
+    {
+      "epoch": 20,
+      "train_ce": 0.753,
+      "valid_mrr": 0.6125
+    },
+    {
+      "epoch": 22,
+      "train_ce": 0.7486,
+      "valid_mrr": 0.6131
+    },
+    {
+      "epoch": 24,
+      "train_ce": 0.7447,
+      "valid_mrr": 0.6137
+    },
+    {
+      "epoch": 26,
+      "train_ce": 0.7416,
+      "valid_mrr": 0.6145
+    },
+    {
+      "epoch": 28,
+      "train_ce": 0.7389,
+      "valid_mrr": 0.6146
+    },
+    {
+      "epoch": 30,
+      "train_ce": 0.7358,
+      "valid_mrr": 0.6151
+    },
+    {
+      "epoch": 32,
+      "train_ce": 0.734,
+      "valid_mrr": 0.6153
+    },
+    {
+      "epoch": 34,
+      "train_ce": 0.7321,
+      "valid_mrr": 0.6157
+    },
+    {
+      "epoch": 36,
+      "train_ce": 0.7298,
+      "valid_mrr": 0.6162
+    },
+    {
+      "epoch": 38,
+      "train_ce": 0.7283,
+      "valid_mrr": 0.6161
+    },
+    {
+      "epoch": 40,
+      "train_ce": 0.7266,
+      "valid_mrr": 0.6168
+    }
+  ],
+  "dataset": "ikgqa-webqsp",
+  "graph": "IKGQA union of subgraphs minus all deleted triples (kge_graph.tsv)"
+}

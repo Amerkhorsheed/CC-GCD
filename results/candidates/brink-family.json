@@ -70,7 +70,7 @@
  "budget_R_times_k": 50,
  "modes": {
   "kge_prob+sig": {
-   "build_seconds": 2.3,
+   "build_seconds": 3.4,
    "stored_candidate_edges": 584000,
    "stored_candidate_precision_vs_complete": 0.00231,
    "splits": {
@@ -631,7 +631,7 @@
    }
   },
   "hybrid+sig": {
-   "build_seconds": 2.3,
+   "build_seconds": 0.8,
    "stored_candidate_edges": 584000,
    "stored_candidate_precision_vs_complete": 0.00323,
    "splits": {
@@ -1192,9 +1192,9 @@
    }
   },
   "cooc+sig": {
-   "build_seconds": 0.9,
+   "build_seconds": 0.6,
    "stored_candidate_edges": 584000,
-   "stored_candidate_precision_vs_complete": 0.00454,
+   "stored_candidate_precision_vs_complete": 0.00451,
    "splits": {
     "val": {
      "questions": 218,
@@ -1205,11 +1205,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.0367,
-       "seed_candidate_precision": 0.1376,
+       "hard_triple_recovered": 0.0046,
+       "seed_candidate_precision": 0.0092,
        "candidate_edges_per_question": 1.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 679.5
+       "walks_augmented_per_question": 679.8
       },
       "R1_k5": {
        "hard_reach_observed": 1.0,
@@ -1217,11 +1217,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.1422,
-       "seed_candidate_precision": 0.1367,
+       "hard_triple_recovered": 0.0092,
+       "seed_candidate_precision": 0.0037,
        "candidate_edges_per_question": 5.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 776.5
+       "walks_augmented_per_question": 785.6
       },
       "R1_k10": {
        "hard_reach_observed": 1.0,
@@ -1229,11 +1229,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.1743,
-       "seed_candidate_precision": 0.083,
+       "hard_triple_recovered": 0.0092,
+       "seed_candidate_precision": 0.0018,
        "candidate_edges_per_question": 10.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 889.2
+       "walks_augmented_per_question": 901.0
       },
       "R1_k20": {
        "hard_reach_observed": 1.0,
@@ -1241,11 +1241,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.1789,
-       "seed_candidate_precision": 0.0438,
+       "hard_triple_recovered": 0.0092,
+       "seed_candidate_precision": 0.0009,
        "candidate_edges_per_question": 20.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 1107.6
+       "walks_augmented_per_question": 1105.5
       },
       "R2_k1": {
        "hard_reach_observed": 1.0,
@@ -1253,11 +1253,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.0734,
-       "seed_candidate_precision": 0.117,
+       "hard_triple_recovered": 0.0321,
+       "seed_candidate_precision": 0.0321,
        "candidate_edges_per_question": 2.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 703.9
+       "walks_augmented_per_question": 708.1
       },
       "R2_k5": {
        "hard_reach_observed": 1.0,
@@ -1265,11 +1265,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.2064,
-       "seed_candidate_precision": 0.0927,
+       "hard_triple_recovered": 0.0826,
+       "seed_candidate_precision": 0.0229,
        "candidate_edges_per_question": 10.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 894.4
+       "walks_augmented_per_question": 923.0
       },
       "R2_k10": {
        "hard_reach_observed": 1.0,
@@ -1277,11 +1277,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.2431,
-       "seed_candidate_precision": 0.056,
+       "hard_triple_recovered": 0.0872,
+       "seed_candidate_precision": 0.0119,
        "candidate_edges_per_question": 20.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 1117.3
+       "walks_augmented_per_question": 1157.8
       },
       "R2_k20": {
        "hard_reach_observed": 1.0,
@@ -1289,11 +1289,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.2523,
-       "seed_candidate_precision": 0.0302,
+       "hard_triple_recovered": 0.0872,
+       "seed_candidate_precision": 0.006,
        "candidate_edges_per_question": 40.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 1540.5
+       "walks_augmented_per_question": 1577.3
       },
       "R3_k1": {
        "hard_reach_observed": 1.0,
@@ -1301,11 +1301,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.0963,
-       "seed_candidate_precision": 0.1009,
+       "hard_triple_recovered": 0.0642,
+       "seed_candidate_precision": 0.055,
        "candidate_edges_per_question": 3.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 728.0
+       "walks_augmented_per_question": 734.2
       },
       "R3_k5": {
        "hard_reach_observed": 1.0,
@@ -1313,11 +1313,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.2615,
-       "seed_candidate_precision": 0.0813,
+       "hard_triple_recovered": 0.1284,
+       "seed_candidate_precision": 0.0297,
        "candidate_edges_per_question": 15.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 1018.4
+       "walks_augmented_per_question": 1050.3
       },
       "R3_k10": {
        "hard_reach_observed": 1.0,
@@ -1325,11 +1325,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.3165,
-       "seed_candidate_precision": 0.0502,
+       "hard_triple_recovered": 0.133,
+       "seed_candidate_precision": 0.0151,
        "candidate_edges_per_question": 30.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 1357.2
+       "walks_augmented_per_question": 1396.7
       },
       "R3_k20": {
        "hard_reach_observed": 1.0,
@@ -1337,11 +1337,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.3257,
-       "seed_candidate_precision": 0.0265,
+       "hard_triple_recovered": 0.133,
+       "seed_candidate_precision": 0.0076,
        "candidate_edges_per_question": 60.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 1995.8
+       "walks_augmented_per_question": 2035.3
       },
       "R5_k1": {
        "hard_reach_observed": 1.0,
@@ -1349,11 +1349,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.1376,
-       "seed_candidate_precision": 0.0881,
+       "hard_triple_recovered": 0.1284,
+       "seed_candidate_precision": 0.0716,
        "candidate_edges_per_question": 5.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 777.5
+       "walks_augmented_per_question": 787.3
       },
       "R5_k5": {
        "hard_reach_observed": 1.0,
@@ -1361,11 +1361,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.3624,
-       "seed_candidate_precision": 0.071,
+       "hard_triple_recovered": 0.2706,
+       "seed_candidate_precision": 0.0407,
        "candidate_edges_per_question": 25.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 1270.8
+       "walks_augmented_per_question": 1309.9
       },
       "R5_k10": {
        "hard_reach_observed": 1.0,
@@ -1373,11 +1373,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.422,
-       "seed_candidate_precision": 0.043,
+       "hard_triple_recovered": 0.2798,
+       "seed_candidate_precision": 0.0224,
        "candidate_edges_per_question": 50.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 1845.0
+       "walks_augmented_per_question": 1892.7
       },
       "R5_k20": {
        "hard_reach_observed": 1.0,
@@ -1385,11 +1385,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.4312,
-       "seed_candidate_precision": 0.0225,
+       "hard_triple_recovered": 0.2798,
+       "seed_candidate_precision": 0.0113,
        "candidate_edges_per_question": 100.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 2907.1
+       "walks_augmented_per_question": 2964.3
       },
       "R10_k1": {
        "hard_reach_observed": 1.0,
@@ -1397,11 +1397,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.289,
-       "seed_candidate_precision": 0.0968,
+       "hard_triple_recovered": 0.3073,
+       "seed_candidate_precision": 0.0977,
        "candidate_edges_per_question": 10.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 902.9
+       "walks_augmented_per_question": 907.9
       },
       "R10_k5": {
        "hard_reach_observed": 1.0,
@@ -1409,11 +1409,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.6743,
-       "seed_candidate_precision": 0.0687,
+       "hard_triple_recovered": 0.711,
+       "seed_candidate_precision": 0.0697,
        "candidate_edges_per_question": 50.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 1900.6
+       "walks_augmented_per_question": 1916.3
       },
       "R10_k10": {
        "hard_reach_observed": 1.0,
@@ -1421,11 +1421,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.7477,
-       "seed_candidate_precision": 0.0416,
+       "hard_triple_recovered": 0.7706,
+       "seed_candidate_precision": 0.041,
        "candidate_edges_per_question": 100.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 3055.9
+       "walks_augmented_per_question": 3074.3
       },
       "R10_k20": {
        "hard_reach_observed": 1.0,
@@ -1433,11 +1433,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.7569,
-       "seed_candidate_precision": 0.0215,
+       "hard_triple_recovered": 0.7752,
+       "seed_candidate_precision": 0.0208,
        "candidate_edges_per_question": 200.0,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 5206.0
+       "walks_augmented_per_question": 5232.1
       },
       "R5_k10_hops12": {
        "hard_reach_observed": 1.0,
@@ -1445,21 +1445,21 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.422,
-       "seed_candidate_precision": 0.043,
-       "candidate_edges_per_question": 2208.3,
+       "hard_triple_recovered": 0.2798,
+       "seed_candidate_precision": 0.0224,
+       "candidate_edges_per_question": 2207.6,
        "walks_observed_per_question": 654.0,
-       "walks_augmented_per_question": 5531.9
+       "walks_augmented_per_question": 5579.7
       }
      },
      "diagnostics": {
       "questions_with_hard_triple": 218,
       "hard_relation_in_top_R": {
-       "1": 0.1881,
-       "2": 0.2569,
-       "3": 0.3303,
-       "5": 0.4358,
-       "10": 0.7615
+       "1": 0.0092,
+       "2": 0.0872,
+       "3": 0.133,
+       "5": 0.2798,
+       "10": 0.7752
       },
       "hard_tail_in_top_k_given_relation": {
        "1": 0.3761,
@@ -1482,11 +1482,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.0556,
-       "seed_candidate_precision": 0.1414,
+       "hard_triple_recovered": 0.0,
+       "seed_candidate_precision": 0.0101,
        "candidate_edges_per_question": 1.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 708.4
+       "walks_augmented_per_question": 706.4
       },
       "R1_k5": {
        "hard_reach_observed": 1.0,
@@ -1494,11 +1494,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.1768,
-       "seed_candidate_precision": 0.1212,
+       "hard_triple_recovered": 0.0101,
+       "seed_candidate_precision": 0.0131,
        "candidate_edges_per_question": 5.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 806.1
+       "walks_augmented_per_question": 809.9
       },
       "R1_k10": {
        "hard_reach_observed": 1.0,
@@ -1506,8 +1506,8 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.2172,
-       "seed_candidate_precision": 0.0813,
+       "hard_triple_recovered": 0.0101,
+       "seed_candidate_precision": 0.0071,
        "candidate_edges_per_question": 10.0,
        "walks_observed_per_question": 681.9,
        "walks_augmented_per_question": 919.6
@@ -1518,11 +1518,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.2273,
-       "seed_candidate_precision": 0.0442,
+       "hard_triple_recovered": 0.0101,
+       "seed_candidate_precision": 0.0035,
        "candidate_edges_per_question": 20.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 1138.1
+       "walks_augmented_per_question": 1122.0
       },
       "R2_k1": {
        "hard_reach_observed": 1.0,
@@ -1530,11 +1530,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.0758,
-       "seed_candidate_precision": 0.1162,
+       "hard_triple_recovered": 0.0404,
+       "seed_candidate_precision": 0.0328,
        "candidate_edges_per_question": 2.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 734.5
+       "walks_augmented_per_question": 734.7
       },
       "R2_k5": {
        "hard_reach_observed": 1.0,
@@ -1542,11 +1542,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.2222,
-       "seed_candidate_precision": 0.0854,
+       "hard_triple_recovered": 0.0707,
+       "seed_candidate_precision": 0.0268,
        "candidate_edges_per_question": 10.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 928.2
+       "walks_augmented_per_question": 942.7
       },
       "R2_k10": {
        "hard_reach_observed": 1.0,
@@ -1554,11 +1554,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.2778,
-       "seed_candidate_precision": 0.0558,
+       "hard_triple_recovered": 0.0707,
+       "seed_candidate_precision": 0.0141,
        "candidate_edges_per_question": 20.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 1148.9
+       "walks_augmented_per_question": 1166.1
       },
       "R2_k20": {
        "hard_reach_observed": 1.0,
@@ -1566,11 +1566,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.2879,
-       "seed_candidate_precision": 0.0302,
+       "hard_triple_recovered": 0.0707,
+       "seed_candidate_precision": 0.0071,
        "candidate_edges_per_question": 40.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 1568.5
+       "walks_augmented_per_question": 1574.7
       },
       "R3_k1": {
        "hard_reach_observed": 1.0,
@@ -1578,11 +1578,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.1111,
-       "seed_candidate_precision": 0.1077,
+       "hard_triple_recovered": 0.0808,
+       "seed_candidate_precision": 0.0707,
        "candidate_edges_per_question": 3.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 760.1
+       "walks_augmented_per_question": 762.3
       },
       "R3_k5": {
        "hard_reach_observed": 1.0,
@@ -1590,11 +1590,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.303,
-       "seed_candidate_precision": 0.0785,
+       "hard_triple_recovered": 0.1313,
+       "seed_candidate_precision": 0.0354,
        "candidate_edges_per_question": 15.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 1055.3
+       "walks_augmented_per_question": 1077.5
       },
       "R3_k10": {
        "hard_reach_observed": 1.0,
@@ -1602,11 +1602,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.3737,
-       "seed_candidate_precision": 0.0515,
+       "hard_triple_recovered": 0.1313,
+       "seed_candidate_precision": 0.0184,
        "candidate_edges_per_question": 30.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 1389.7
+       "walks_augmented_per_question": 1412.2
       },
       "R3_k20": {
        "hard_reach_observed": 1.0,
@@ -1614,11 +1614,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.3838,
-       "seed_candidate_precision": 0.0274,
+       "hard_triple_recovered": 0.1313,
+       "seed_candidate_precision": 0.0093,
        "candidate_edges_per_question": 60.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 2024.9
+       "walks_augmented_per_question": 2037.7
       },
       "R5_k1": {
        "hard_reach_observed": 1.0,
@@ -1626,11 +1626,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.1263,
-       "seed_candidate_precision": 0.0838,
+       "hard_triple_recovered": 0.1515,
+       "seed_candidate_precision": 0.0798,
        "candidate_edges_per_question": 5.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 809.9
+       "walks_augmented_per_question": 815.2
       },
       "R5_k5": {
        "hard_reach_observed": 1.0,
@@ -1638,11 +1638,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.3434,
-       "seed_candidate_precision": 0.0642,
+       "hard_triple_recovered": 0.2879,
+       "seed_candidate_precision": 0.0412,
        "candidate_edges_per_question": 25.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 1301.9
+       "walks_augmented_per_question": 1332.9
       },
       "R5_k10": {
        "hard_reach_observed": 1.0,
@@ -1650,11 +1650,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.4192,
-       "seed_candidate_precision": 0.0407,
+       "hard_triple_recovered": 0.3182,
+       "seed_candidate_precision": 0.023,
        "candidate_edges_per_question": 50.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 1858.9
+       "walks_augmented_per_question": 1903.0
       },
       "R5_k20": {
        "hard_reach_observed": 1.0,
@@ -1662,11 +1662,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.4293,
-       "seed_candidate_precision": 0.0215,
+       "hard_triple_recovered": 0.3182,
+       "seed_candidate_precision": 0.0117,
        "candidate_edges_per_question": 100.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 2909.6
+       "walks_augmented_per_question": 2963.4
       },
       "R10_k1": {
        "hard_reach_observed": 1.0,
@@ -1674,11 +1674,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.2879,
-       "seed_candidate_precision": 0.0914,
+       "hard_triple_recovered": 0.3182,
+       "seed_candidate_precision": 0.1,
        "candidate_edges_per_question": 10.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 935.8
+       "walks_augmented_per_question": 938.8
       },
       "R10_k5": {
        "hard_reach_observed": 1.0,
@@ -1686,11 +1686,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.6616,
-       "seed_candidate_precision": 0.0636,
+       "hard_triple_recovered": 0.7172,
+       "seed_candidate_precision": 0.0663,
        "candidate_edges_per_question": 50.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 1934.4
+       "walks_augmented_per_question": 1946.5
       },
       "R10_k10": {
        "hard_reach_observed": 1.0,
@@ -1698,11 +1698,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.7677,
-       "seed_candidate_precision": 0.0396,
+       "hard_triple_recovered": 0.8081,
+       "seed_candidate_precision": 0.0405,
        "candidate_edges_per_question": 100.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 3075.1
+       "walks_augmented_per_question": 3086.6
       },
       "R10_k20": {
        "hard_reach_observed": 1.0,
@@ -1710,11 +1710,11 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.7879,
-       "seed_candidate_precision": 0.0206,
+       "hard_triple_recovered": 0.8182,
+       "seed_candidate_precision": 0.0207,
        "candidate_edges_per_question": 200.0,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 5221.5
+       "walks_augmented_per_question": 5226.4
       },
       "R5_k10_hops12": {
        "hard_reach_observed": 1.0,
@@ -1722,21 +1722,21 @@
        "hard_reach_only_via_candidates": 0.0,
        "any_reach_observed": 1.0,
        "any_reach_augmented": 1.0,
-       "hard_triple_recovered": 0.4192,
-       "seed_candidate_precision": 0.0407,
-       "candidate_edges_per_question": 2198.5,
+       "hard_triple_recovered": 0.3182,
+       "seed_candidate_precision": 0.023,
+       "candidate_edges_per_question": 2178.3,
        "walks_observed_per_question": 681.9,
-       "walks_augmented_per_question": 5559.2
+       "walks_augmented_per_question": 5603.3
       }
      },
      "diagnostics": {
       "questions_with_hard_triple": 198,
       "hard_relation_in_top_R": {
-       "1": 0.2323,
-       "2": 0.2929,
-       "3": 0.3889,
-       "5": 0.4394,
-       "10": 0.798
+       "1": 0.0152,
+       "2": 0.0758,
+       "3": 0.1364,
+       "5": 0.3232,
+       "10": 0.8232
       },
       "hard_tail_in_top_k_given_relation": {
        "1": 0.3687,
@@ -1753,7 +1753,7 @@
    }
   },
   "kge+sig": {
-   "build_seconds": 2.1,
+   "build_seconds": 1.0,
    "stored_candidate_edges": 584000,
    "stored_candidate_precision_vs_complete": 0.00458,
    "splits": {
@@ -2314,7 +2314,7 @@
    }
   },
   "kge_prob": {
-   "build_seconds": 1.9,
+   "build_seconds": 0.7,
    "stored_candidate_edges": 584000,
    "stored_candidate_precision_vs_complete": 0.00231,
    "splits": {

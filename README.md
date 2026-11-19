@@ -5,8 +5,9 @@ edge receives a calibrated, finite penalty derived from a per-edge observation
 model, instead of a hard mask. Research plan and novelty review: see the
 project doc (Claude Docs, "الخطة البحثية المصحّحة لـ CC-GCD").
 
-Status (Nov 2026): baseline B1 (GCR) set up and smoke-tested; BRINK prepared; KGE candidate
-generator (plan section 5.1) built and measured on BRINK, wired into GCR as B1+. No CC-GCD decoder yet.
+Status (Nov 2026): baseline B1 (GCR) set up and smoke-tested; BRINK and IKGQA-WebQSP prepared; KGE
+candidate generator (plan section 5.1) built and measured on BRINK and IKGQA-WebQSP, wired into GCR
+(BRINK) as B1+. No CC-GCD decoder yet.
 
 ## Layout
 
@@ -23,10 +24,11 @@ generator (plan section 5.1) built and measured on BRINK, wired into GCR as B1+.
 | `analysis/kg_trie_coverage.py` | Hard KG-Trie ceiling on RoG-WebQSP / RoG-CWQ |
 | `scripts/setup.sh` | Pinned third-party clones (GCR 9518e8e, BRINK b95506d, GoG c0b2c36) + Python env |
 | `scripts/run_gcr_brink.py` | GCR step 1 on BRINK, official BRINK evaluator, faithful-path rate |
-| `cc_gcd/kge/complex_kge.py` | ComplEx-N3 (reciprocal, 1-vs-all) trained on the observed graph only; exported scorer |
+| `cc_gcd/kge/complex_kge.py` | ComplEx-N3 (reciprocal; 1-vs-all or sampled softmax) trained on the observed graph only; exported scorer |
 | `cc_gcd/graph/candidate_generator.py` | Absent-edge candidates: top-R relations x top-k KGE tails per entity, signature filter |
-| `scripts/train_kge.py` | Train the KGE on BRINK's incomplete graph (RTX 3060 Ti) |
-| `scripts/build_candidates.py` | Candidate tables + oracle recall, hard-fact recovery and trie growth on val/test |
+| `scripts/train_kge.py` | Train the KGE on BRINK's incomplete graph or the IKGQA union graph (RTX 3060 Ti) |
+| `scripts/build_candidates.py` | BRINK: candidate tables + oracle recall, hard-fact recovery and trie growth on val/test |
+| `scripts/build_candidates_ikgqa.py` | IKGQA: global vs subgraph-local candidates per IKG level, dev/eval split |
 | `scripts/reproduce_gcr_webqsp_gpu.sh` | Full two-step GCR reproduction on WebQSP (one GPU, no OpenAI key) |
 | `results/` | Small committed summaries (coverage, BRINK stats) |
 
@@ -48,6 +50,11 @@ python scripts/train_kge.py --dataset family --reg_weight 5e-3 --epochs 200   # 
 python scripts/train_kge.py --dataset fb15k237 --reg_weight 1e-2              # ~9 min
 python scripts/build_candidates.py --dataset family                          # ~1 min
 python scripts/build_candidates.py --dataset fb15k237                        # ~15 min (mostly evaluation)
+# IKGQA-WebQSP: one leak-free KGE for all levels (sampled softmax: 599k entities do not fit 1-vs-all on 8 GB)
+export HF_HOME=$PWD/.hf
+python scripts/train_kge.py --dataset ikgqa-webqsp --dim 200 --batch_size 1024 --neg_sample 16384 --amp \
+  --reg_weight 1e-2 --epochs 40 --eval_every 2                                 # ~30 min
+python scripts/build_candidates_ikgqa.py --dataset webqsp                     # ~20 min
 # B1+: hard trie over observed + candidate edges, no penalty
 python scripts/run_gcr_brink.py --dataset fb15k237 --split "test[:5]" --candidates hybrid+sig --cand_R 10 --cand_k 5
 ```
@@ -139,12 +146,16 @@ chosen on val (best recovery with R x k <= 50); numbers below are test, L = 2, i
 Diagnostics (test, `diagnostics` in the JSON):
 - Relation choice is the bottleneck, not tail ranking. Given the right relation, the removed tail is in the
   KGE's top 10 for 97% (Family) and 87% (FB15k-237) of questions; the right relation is in the entity's
-  top 5 for only 34-44% (Family) and 42% (FB15k-237, `hybrid`). Recovery still rises at R = 10, so R_max = 10
+  top 5 for only 32-34% (Family) and 42-44% (FB15k-237). Recovery still rises at R = 10, so R_max = 10
   may be limiting; the plan's default R = 5, k = 10 is dominated by R = 10, k = 5 on both graphs.
 - Ranking relations by the softmax probability of the best absent tail (`kge_prob`) is the worst ranker
   (FB15k-237 recovery 0.385 vs 0.544 at R = 10, k = 5): BRINK removes facts of relations the entity
-  already has, and the observed tails absorb the softmax mass. Raw scores (`kge`) and co-occurrence
-  (`cooc`) do better; their combination (`hybrid`) is best on FB15k-237, `cooc` on Family test.
+  already has, and the observed tails absorb the softmax mass. Raw scores (`kge`), co-occurrence
+  (`cooc`) and their combination (`hybrid`) do better; val picks `kge` (Family) and `hybrid` (FB15k-237).
+- `cooc` alone is tie-bound: every relation an entity already has scores 1, so for 20% (Family) and 40%
+  (FB15k-237) of entities the 10th-best relation ties the best. Ties now go to the more frequent relation
+  (deterministic, KGE-free); an earlier version broke them arbitrarily, which had moved `cooc` test recovery
+  by up to 10 points. The val-selected configurations above did not change.
 - The signature (domain/range) filter never removed a hard fact and helps when relations are ranked by
   KGE probability (0.385 vs 0.309 without it).
 - Candidates at hop 2 as well (from every hop-1 node) add ~10,000 edges per FB15k-237 question
@@ -154,6 +165,44 @@ Diagnostics (test, `diagnostics` in the JSON):
 - B1+ smoke test (GCR-Qwen2-0.5B, 3 Family questions, not a result): without a penalty the candidates
   dominate the trie (e.g. 971 of 1,202 trie paths use an absent edge) and 20 of 24 generated KG paths
   used one, which is why the absence penalty, not the generator alone, decides precision.
+
+**KGE candidate generator on IKGQA-WebQSP** (`results/kge/ikgqa-webqsp.json`,
+`results/candidates/ikgqa-webqsp.json`). IKGQA has no global KG and deletes per question, and 62% of a
+level's deleted triples also occur in another question's RoG subgraph, so the KGE is trained on the union
+of the 1,000 subgraphs minus every triple deleted at any level (1,740,574 triples, 598k entities, 10,352
+relations with inverse; one model serves all levels). ComplEx-N3, dim 200, sampled softmax (16,384 shared
+negatives) because 1-vs-all over 598k entities does not fit beside the desktop on the 8 GB card; holdout
+filtered MRR 0.617 (Hits@10 0.678), 29 min. KGE rankings score the 50 relations with the highest
+co-occurrence per topic entity. IKGQA has only test questions, so every fifth question (200) is a dev set
+for selection and numbers are on the other 800. *Global* ranks tails over all entities; *local* ranks them
+only over entities of the question's observed subgraph at that level (the evidence GCR already reads).
+Candidates at hop 1; L = 2 with inverse edges. Observed-only reachability matches the committed
+`ikg_inverse_hit_within_2` ceilings.
+
+| Eval, 800 q | Answer reachable: observed -> with candidates, mean IKG-20..80 | same, IKG-80 | ... through restored deleted facts only, mean | Deleted topic fact recovered (q with one) | Candidate edges / q |
+| --- | --- | --- | --- | --- | --- |
+| Global `hybrid`, R = 10, k = 5 (BRINK choice, untuned) | 89.5% -> 90.3% | 83.9% -> 85.6% | 89.8% | 7.2% | 51 |
+| Local `hybrid`, R = 10, k = 5 | 89.5% -> 92.5% | 83.9% -> 89.0% | 90.1% | 12.7% | 51 |
+| Local `cooc`, R = 5, k = 10 (selected on dev, reachability) | 89.5% -> 93.7% | 83.9% -> 90.9% | 89.5% | 2.2% | 50 |
+| Local `hybrid`, R = 10, k = 20 (4x budget) | 89.5% -> 94.6% | 83.9% -> 92.6% | 90.4% | 17.8% | 202 |
+
+At IKG-0 no candidate changes reachability (97.9%). Local `hybrid`, R = 10, k = 5 grows trie walks per
+question from 13,695 to 15,364 at IKG-80.
+
+- Nearly all of the reachability gain is through hypothetical edges, not restored evidence: restoring the
+  question's own deleted facts adds at most +0.9 points, and the configuration selected by reachability
+  (`cooc`) restores almost none. Only 0.1-0.6% of candidates are the question's deleted facts. So on IKGQA a
+  generator raises the hard-trie ceiling mainly by opening shortcuts, which is exactly where the absence
+  penalty must decide; reachability alone is the wrong selection criterion for the generator (the JSON also
+  reports the restored-evidence selection: local `kge`, R = 10, k = 1).
+- Local beats global at the same budget (recovery 12.7% vs 7.2%): ranking 598k entities is much harder than
+  ranking a subgraph's few thousand.
+- Why recovery is low: 73% of deleted triples touch a topic entity, but 40% of those point to CVT nodes. Of
+  2,751 CVT-tailed deleted facts, 28% have a CVT that occurs only in deleted triples (outside the KGE
+  vocabulary), and the rest have median degree 2, so no embedding can say which CVT belongs to the topic
+  (deleted tail in the global top 10 given the relation: 3.4%; named tails 15.8%, top 100: 42.5%). GoG also
+  drops pairs on a path independently, so restoring the topic-CVT edge often still leaves the CVT-answer
+  edge missing, and hop-1 candidates cannot restore hop-2 deletions.
 
 ## Reference numbers (GCR paper, WebQSP test)
 
