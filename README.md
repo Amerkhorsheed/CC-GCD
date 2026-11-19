@@ -7,7 +7,8 @@ project doc (Claude Docs, "الخطة البحثية المصحّحة لـ CC-GC
 
 Status (Nov 2026): baseline B1 (GCR) set up and smoke-tested; BRINK and IKGQA-WebQSP prepared; KGE
 candidate generator (plan section 5.1) built and measured on BRINK and IKGQA-WebQSP, wired into GCR
-(BRINK) as B1+. No CC-GCD decoder yet.
+(BRINK) as B1+; observation model c(e) (plan section 6) built and tested across masking mechanisms on
+BRINK. No CC-GCD decoder yet.
 
 ## Layout
 
@@ -29,6 +30,9 @@ candidate generator (plan section 5.1) built and measured on BRINK and IKGQA-Web
 | `scripts/train_kge.py` | Train the KGE on BRINK's incomplete graph or the IKGQA union graph (RTX 3060 Ti) |
 | `scripts/build_candidates.py` | BRINK: candidate tables + oracle recall, hard-fact recovery and trie growth on val/test |
 | `scripts/build_candidates_ikgqa.py` | IKGQA: global vs subgraph-local candidates per IKG level, dev/eval split |
+| `cc_gcd/calibration/missingness.py` | Masking mechanisms A (MCAR), B (relation-selective), C (degree-biased), D (path-targeted, train questions) with exact retention = oracle c |
+| `cc_gcd/calibration/observation_model.py` | c(e): cross-fitted structural features, SCAR / per-relation / logistic / GBM + isotonic + clipping; evidence score s(e) |
+| `scripts/observation_lomo.py` | Mechanism-transfer matrix, leave-one-mechanism-out, BRINK's own missingness as held-out test (CPU, ~2 min) |
 | `scripts/reproduce_gcr_webqsp_gpu.sh` | Full two-step GCR reproduction on WebQSP (one GPU, no OpenAI key) |
 | `results/` | Small committed summaries (coverage, BRINK stats) |
 
@@ -55,6 +59,9 @@ export HF_HOME=$PWD/.hf
 python scripts/train_kge.py --dataset ikgqa-webqsp --dim 200 --batch_size 1024 --neg_sample 16384 --amp \
   --reg_weight 1e-2 --epochs 40 --eval_every 2                                 # ~30 min
 python scripts/build_candidates_ikgqa.py --dataset webqsp                     # ~20 min
+# Observation model c(e) (CPU)
+python scripts/observation_lomo.py --dataset fb15k237                         # ~2 min
+python scripts/observation_lomo.py --dataset family
 # B1+: hard trie over observed + candidate edges, no penalty
 python scripts/run_gcr_brink.py --dataset fb15k237 --split "test[:5]" --candidates hybrid+sig --cand_R 10 --cand_k 5
 ```
@@ -203,6 +210,49 @@ question from 13,695 to 15,364 at IKG-80.
   (deleted tail in the global top 10 given the relation: 3.4%; named tails 15.8%, top 100: 42.5%). GoG also
   drops pairs on a path independently, so restoring the topic-CVT edge often still leaves the CVT-answer
   edge missing, and hop-1 candidates cannot restore hop-2 deletions.
+
+**Observation model c(e) on BRINK** (`results/observation/`). Reference graph = BRINK's observed graph;
+four controlled mechanisms (A MCAR, B relation-selective, C degree-biased, D path-targeted on *train*
+questions; mean retention 0.69-0.75) give each triple an exact retention probability, which is also the
+oracle c (B6). Label = the triple survived masking. Features are computed on the masked graph and are
+cross-fitted (10 folds; fold k sees the graph without all of fold k): excluding only the triple itself
+still leaks, because within one draw every kept r-triple sees K - 1 other kept r-triples and every dropped
+one K, and a GBM with the relation id then reached AUC 0.995 under MCAR (oracle 0.5); cross-fitted, 0.495.
+Isotonic on a separate split, clipping to [0.02, 0.98]. Three masking seeds; triples split 60/20/20.
+BRINK's own rule-based missingness (complete vs incomplete) is never used to train or calibrate.
+
+| FB15k-237 (Family) | Same mechanism: ECE / AUC | Other mechanism: ECE / AUC | Leave-one-mechanism-out: ECE / AUC | LOMO Brier, level matched | BRINK missingness: ECE / AUC |
+| --- | --- | --- | --- | --- | --- |
+| Constant c (SCAR, B5) | 0.007 / 0.50 | **0.033** / 0.50 (0.125) | **0.028** / 0.50 (0.102) | 0.2053 (**0.2123**) | 0.262 / 0.50 |
+| Per relation | 0.007 / 0.66 | 0.133 / 0.49 (0.181) | 0.101 / 0.48 (0.129) | 0.2148 (0.2203) | 0.263 / **0.65** |
+| Logistic regression | 0.008 / 0.63 | 0.101 / 0.50 (0.215) | 0.062 / 0.51 (0.106) | 0.2099 (0.2138) | 0.242 / 0.57 |
+| GBM + relation id | 0.008 / **0.69** | 0.145 / 0.49 (0.206) | 0.060 / **0.61** (0.116) | **0.2001** (0.2187) | **0.098** / 0.52 |
+
+Family values in parentheses where shown. Oracle AUC (mean of the four mechanisms): 0.71 (FB15k-237),
+0.67 (Family). "Level matched" shifts each prediction by one logit constant to the target's true mean and
+compares with the constant at that mean (0.2053 / 0.2123): it separates the per-edge shape of c from its
+overall level, which no estimator can identify from an incomplete graph (plan 6.1); it uses the target's
+true rate, so it is a diagnostic, not an estimator. On BRINK's missingness (retention 97.1% FB15k-237,
+89.6% Family) the level-matched constant has Brier 0.02809 (0.0931) and no model beats it by more than 0.5%.
+
+- Within a mechanism the features work: the GBM nearly reaches the oracle (B 0.783 vs 0.779, C 0.719 vs
+  0.726, D 0.754 vs 0.823 AUC).
+- Across mechanisms they do not. Trained on one mechanism and tested on another, every learned c is
+  worse calibrated than the constant and ranks at chance or below (degree-biased -> path-targeted AUC 0.44,
+  the reverse 0.41: C drops low-degree edges, D edges near question entities, often hubs). Trained on the
+  three other mechanisms, the GBM keeps some ranking (AUC 0.61 on FB15k-237, 0.71 on B), and once the level
+  is given it beats the constant by 2.5% Brier on FB15k-237, but not on Family.
+- By the plan's stop rule (section 10: c's ECE on a held-out mechanism clearly worse than constant c, B5),
+  c learned from these synthetic mechanisms fails clearly on FB15k-237 (off-diagonal and LOMO ECE 2-4x the
+  constant's) and is no better than the constant on Family (LOMO ECE 0.106-0.129 vs 0.102). The level of c
+  is the part that does not transfer; the per-edge shape transfers weakly at best.
+- On BRINK's real missingness, models trained on the path-targeted mechanism rank best (AUC 0.66 on
+  FB15k-237, 0.55 on Family), consistent with BRINK deleting rule heads around question paths; the GBM
+  trained on all four mechanisms is closest in level (ECE 0.098) but ranks near chance.
+- Implication: synthetic masking can test an estimator but not supply a transferable c. The plan's primary
+  calibration source, natural missingness from temporal Wikidata snapshots (section 6.2), is the next
+  required step before c can carry the decoder; until then B5 (constant c, i.e. a tuned level) is the
+  honest default, and H2 rests on the level being set per graph, not learned.
 
 ## Reference numbers (GCR paper, WebQSP test)
 
