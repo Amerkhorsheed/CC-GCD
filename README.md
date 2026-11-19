@@ -5,8 +5,8 @@ edge receives a calibrated, finite penalty derived from a per-edge observation
 model, instead of a hard mask. Research plan and novelty review: see the
 project doc (Claude Docs, "الخطة البحثية المصحّحة لـ CC-GCD").
 
-Status (Nov 2026): baseline B1 (GCR) set up and smoke-tested; BRINK prepared.
-No CC-GCD decoder yet.
+Status (Nov 2026): baseline B1 (GCR) set up and smoke-tested; BRINK prepared; KGE candidate
+generator (plan section 5.1) built and measured on BRINK, wired into GCR as B1+. No CC-GCD decoder yet.
 
 ## Layout
 
@@ -23,6 +23,10 @@ No CC-GCD decoder yet.
 | `analysis/kg_trie_coverage.py` | Hard KG-Trie ceiling on RoG-WebQSP / RoG-CWQ |
 | `scripts/setup.sh` | Pinned third-party clones (GCR 9518e8e, BRINK b95506d, GoG c0b2c36) + Python env |
 | `scripts/run_gcr_brink.py` | GCR step 1 on BRINK, official BRINK evaluator, faithful-path rate |
+| `cc_gcd/kge/complex_kge.py` | ComplEx-N3 (reciprocal, 1-vs-all) trained on the observed graph only; exported scorer |
+| `cc_gcd/graph/candidate_generator.py` | Absent-edge candidates: top-R relations x top-k KGE tails per entity, signature filter |
+| `scripts/train_kge.py` | Train the KGE on BRINK's incomplete graph (RTX 3060 Ti) |
+| `scripts/build_candidates.py` | Candidate tables + oracle recall, hard-fact recovery and trie growth on val/test |
 | `scripts/reproduce_gcr_webqsp_gpu.sh` | Full two-step GCR reproduction on WebQSP (one GPU, no OpenAI key) |
 | `results/` | Small committed summaries (coverage, BRINK stats) |
 
@@ -37,6 +41,15 @@ python data_prep/prepare_brink.py --dataset fb15k237
 python data_prep/prepare_ikgqa.py --dataset webqsp     # and --dataset cwq (downloads ~370 MB)
 python scripts/run_gcr_brink.py --dataset family --version incomplete --split "test[:5]" \
   --model_path rmanluo/GCR-Qwen2-0.5B-Instruct --dtype fp32 --attn_implementation sdpa
+
+# KGE candidate generator (GPU work on the RTX 3060 Ti only)
+export CUDA_VISIBLE_DEVICES=GPU-c5cd579e-52d6-31a3-0091-04ae52932736
+python scripts/train_kge.py --dataset family --reg_weight 5e-3 --epochs 200   # ~20 s
+python scripts/train_kge.py --dataset fb15k237 --reg_weight 1e-2              # ~9 min
+python scripts/build_candidates.py --dataset family                          # ~1 min
+python scripts/build_candidates.py --dataset fb15k237                        # ~15 min (mostly evaluation)
+# B1+: hard trie over observed + candidate edges, no penalty
+python scripts/run_gcr_brink.py --dataset fb15k237 --split "test[:5]" --candidates hybrid+sig --cand_R 10 --cand_k 5
 ```
 
 ## Findings so far
@@ -104,6 +117,43 @@ answer for a quarter of WebQSP questions and half of CWQ questions.
 that are not in the question's subgraph, i.e. beams that left the constraint. This is a smoke-scale
 check of the pipeline, not a reproduction: the paper reports no step-1-only number for 0.5B
 (8B step 1: F1 57.0, P 58.0, R 70.1). The full 8B run needs `scripts/reproduce_gcr_webqsp_gpu.sh`.
+
+**KGE candidate generator on BRINK** (`results/kge/`, `results/candidates/`). ComplEx-N3, dim 256,
+trained on the incomplete graph with inverse relations; early stopping on a random 2% holdout of
+observed triples (never BRINK's removed triples). Holdout filtered MRR: Family 0.688 (Hits@10 0.970),
+FB15k-237 0.412 (Hits@10 0.619). For each entity the generator proposes the top-k absent tails of its
+top-R relations; candidates enter the trie at hop 1 (from the topic entities). Mode and (R, k) were
+chosen on val (best recovery with R x k <= 50); numbers below are test, L = 2, inverse edges:
+
+| Test | Family | FB15k-237 |
+| --- | --- | --- |
+| Selected on val | relation rank `kge`, R = 10, k = 5 | `hybrid` (co-occurrence x KGE prob.), R = 10, k = 5 |
+| Removed hard fact itself among the candidates | 61.6% | 54.4% |
+| Hard answer reachable: observed only / with candidates | 100% / 100% | 97.96% / 99.44% |
+| Reachable only through candidate edges | 0% | 1.48% |
+| Any gold answer reachable: observed / with candidates | 100% / 100% | 98.7% / 99.8% |
+| Candidate edges added per question | 50 | 47 |
+| Trie walks per question (paths <= 2): observed -> with candidates | 682 -> 1,942 | 21,350 -> 37,147 |
+| Candidates that are BRINK-removed facts (lower bound on precision) | 6.6% | 5.5% |
+
+Diagnostics (test, `diagnostics` in the JSON):
+- Relation choice is the bottleneck, not tail ranking. Given the right relation, the removed tail is in the
+  KGE's top 10 for 97% (Family) and 87% (FB15k-237) of questions; the right relation is in the entity's
+  top 5 for only 34-44% (Family) and 42% (FB15k-237, `hybrid`). Recovery still rises at R = 10, so R_max = 10
+  may be limiting; the plan's default R = 5, k = 10 is dominated by R = 10, k = 5 on both graphs.
+- Ranking relations by the softmax probability of the best absent tail (`kge_prob`) is the worst ranker
+  (FB15k-237 recovery 0.385 vs 0.544 at R = 10, k = 5): BRINK removes facts of relations the entity
+  already has, and the observed tails absorb the softmax mass. Raw scores (`kge`) and co-occurrence
+  (`cooc`) do better; their combination (`hybrid`) is best on FB15k-237, `cooc` on Family test.
+- The signature (domain/range) filter never removed a hard fact and helps when relations are ranked by
+  KGE probability (0.385 vs 0.309 without it).
+- Candidates at hop 2 as well (from every hop-1 node) add ~10,000 edges per FB15k-237 question
+  (trie walks 44,000-70,000) for +0 to 0.4 points of reachability: hop 1 only is the default.
+- BRINK keeps alternative paths, so reachability gains are small; BRINK measures whether the decoder
+  picks the recovered fact. Reachability headroom is in IKGQA (next: a KGE over Freebase/RoG subgraphs).
+- B1+ smoke test (GCR-Qwen2-0.5B, 3 Family questions, not a result): without a penalty the candidates
+  dominate the trie (e.g. 971 of 1,202 trie paths use an absent edge) and 20 of 24 generated KG paths
+  used one, which is why the absence penalty, not the generator alone, decides precision.
 
 ## Reference numbers (GCR paper, WebQSP test)
 

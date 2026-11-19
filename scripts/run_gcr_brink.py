@@ -52,6 +52,12 @@ def main():
     ap.add_argument("--attn_implementation", default="sdpa")
     ap.add_argument("--out", default=os.path.join(ROOT, "results", "gcr_brink"))
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--candidates", default=None,
+                    help="B1+: generator mode under data/candidates/brink-<dataset>/ (e.g. kge+sig); "
+                         "absent candidate edges join the KG-Trie with no penalty")
+    ap.add_argument("--cand_R", type=int, default=5)
+    ap.add_argument("--cand_k", type=int, default=10)
+    ap.add_argument("--cand_hops", default="1", help="hops that get candidate edges, e.g. 1 or 1,2")
     args = ap.parse_args()
 
     split, lo, hi = parse_split(args.split)
@@ -60,14 +66,25 @@ def main():
     ids = {q["id"] for q in questions}
 
     tag = f"{args.dataset}-{args.version}-{args.split}-L{args.hops}-{args.path_mode}" + (
-        f"-fan{args.max_fanout}" if args.max_fanout else "")
+        f"-fan{args.max_fanout}" if args.max_fanout else "") + (
+        f"-cand-{args.candidates}-R{args.cand_R}k{args.cand_k}h{args.cand_hops.replace(',', '')}"
+        if args.candidates else "")
     out_dir = os.path.join(args.out, os.path.basename(args.model_path.rstrip("/")), tag)
     os.makedirs(out_dir, exist_ok=True)
     json.dump(vars(args), open(os.path.join(out_dir, "args.json"), "w"), indent=2)
 
     runner = GCRRunner(args.model_path, k=args.k, dtype=args.dtype, attn_implementation=args.attn_implementation,
                        hops=args.hops)
-    samples = (kg.sample(q, hops=args.hops, max_fanout=args.max_fanout) for q in questions)
+    extra = lambda q: None  # noqa: E731
+    if args.candidates:
+        from cc_gcd.graph.candidate_generator import CandidateGenerator
+        from cc_gcd.kge.complex_kge import ComplExScorer
+        kg_obs = BrinkKG(kg.root, version="incomplete", inverse=False)
+        gen = CandidateGenerator(kg_obs.triples, ComplExScorer(os.path.join(ROOT, "data", "kge", f"brink-{args.dataset}")))
+        gen.load(os.path.join(ROOT, "data", "candidates", f"brink-{args.dataset}", f"{args.candidates}.npz"))
+        hops_c = {int(x) for x in args.cand_hops.split(",")}
+        extra = lambda q: gen.expand(q["q_entity"], kg.adj, args.cand_R, args.cand_k, hops_c, args.hops)  # noqa: E731
+    samples = (kg.sample(q, hops=args.hops, max_fanout=args.max_fanout, extra_edges=extra(q)) for q in questions)
     pred_file = os.path.join(out_dir, "predictions.jsonl")
     runner.run(samples, pred_file, path_mode=args.path_mode, force=args.force,
                progress=lambda it: tqdm(it, total=len(questions)))

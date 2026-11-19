@@ -1,0 +1,76 @@
+{
+  "model": "ComplEx-N3 (reciprocal, 1-vs-all CE, Adagrad)",
+  "dim": 256,
+  "lr": 0.1,
+  "batch_size": 512,
+  "reg_weight_n3": 0.005,
+  "seed": 0,
+  "epochs_max": 200,
+  "best_epoch": 30,
+  "train_seconds": 5.9,
+  "train_triples_canonical": 15470,
+  "valid_triples_canonical": 315,
+  "entities": 2920,
+  "relations_with_inverse": 24,
+  "valid_mrr": 0.6882,
+  "valid_hits@1": 0.5254,
+  "valid_hits@10": 0.9698,
+  "history": [
+    {
+      "epoch": 5,
+      "train_ce": 1.2162,
+      "valid_mrr": 0.6595
+    },
+    {
+      "epoch": 10,
+      "train_ce": 1.1126,
+      "valid_mrr": 0.6775
+    },
+    {
+      "epoch": 15,
+      "train_ce": 1.0733,
+      "valid_mrr": 0.6694
+    },
+    {
+      "epoch": 20,
+      "train_ce": 1.0506,
+      "valid_mrr": 0.6764
+    },
+    {
+      "epoch": 25,
+      "train_ce": 1.0354,
+      "valid_mrr": 0.6821
+    },
+    {
+      "epoch": 30,
+      "train_ce": 1.0243,
+      "valid_mrr": 0.6882
+    },
+    {
+      "epoch": 35,
+      "train_ce": 1.0161,
+      "valid_mrr": 0.6851
+    },
+    {
+      "epoch": 40,
+      "train_ce": 1.0094,
+      "valid_mrr": 0.6812
+    },
+    {
+      "epoch": 45,
+      "train_ce": 1.0036,
+      "valid_mrr": 0.6861
+    }
+  ],
+  "dataset": "brink-family",
+  "graph": "kg_incomplete.tsv (observed graph only)",
+  "selection": {
+    "criterion": "holdout filtered MRR",
+    "tried": {
+      "N3=5e-2": 0.6824,
+      "N3=1e-2": 0.6778,
+      "N3=5e-3": 0.6882,
+      "N3=1e-3": 0.6678
+    }
+  }
+}

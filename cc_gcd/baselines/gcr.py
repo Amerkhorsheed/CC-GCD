@@ -110,6 +110,12 @@ class GCRRunner:
                 res.pop("input", None)
                 res["n_trie_paths"] = len(s["paths"])
                 res["n_paths_generated"], res["n_paths_in_kg"] = path_validity(res["prediction"], s["paths"])
+                if "candidate_graph" in s:  # B1+: separate paths that use an absent (candidate) edge
+                    cand = {tuple(e) for e in s["candidate_graph"]}
+                    via = [p for p in s["paths"] if any(tuple(e) in cand for e in p)]
+                    res["n_candidate_edges"] = len(cand)
+                    res["n_trie_paths_via_candidate"] = len(via)
+                    res["n_paths_via_candidate"] = path_validity(res["prediction"], via)[1]
                 for key in ("hard_answer", "ikg_level"):
                     if key in s:
                         res[key] = s[key]

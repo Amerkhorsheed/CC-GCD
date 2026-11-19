@@ -51,12 +51,14 @@ class BrinkKG:
                 yield json.loads(line)
 
     # ------------------------------------------------------------------ subgraph
-    def neighbourhood(self, seeds: Iterable[str], hops: int, max_fanout: Optional[int] = None) -> List[Triple]:
+    def neighbourhood(self, seeds: Iterable[str], hops: int, max_fanout: Optional[int] = None,
+                      extra_adj: Optional[Dict[str, List[Tuple[str, str]]]] = None) -> List[Triple]:
         """Edges on directed (inverse-augmented) paths of length <= hops from seeds.
 
         ``max_fanout`` caps the number of edges kept per (node, relation) at
         depth >= 1 (the seed's own edges are never capped), keeping the
         lexicographically first tails so the cap is deterministic.
+        ``extra_adj`` adds edges (e.g. absent candidates) that the walk may also follow.
         """
         edges: set = set()
         frontier = set(seeds)
@@ -64,7 +66,7 @@ class BrinkKG:
         for depth in range(hops):
             nxt = set()
             for u in frontier:
-                out = self.adj.get(u, [])
+                out = self.adj.get(u, []) + (extra_adj.get(u, []) if extra_adj else [])
                 if max_fanout is not None and depth > 0:
                     by_rel: Dict[str, List[str]] = defaultdict(list)
                     for r, v in out:
@@ -94,11 +96,21 @@ class BrinkKG:
     def display(self, eid: str) -> str:
         return self.name.get(eid, eid)
 
-    def sample(self, q: dict, hops: int = 2, max_fanout: Optional[int] = None) -> dict:
-        """One question in the dict format GCR's prompt builders expect (display names)."""
-        graph = self.neighbourhood(q["q_entity"], hops, max_fanout)
+    def sample(self, q: dict, hops: int = 2, max_fanout: Optional[int] = None,
+               extra_edges: Optional[Iterable[Triple]] = None) -> dict:
+        """One question in the dict format GCR's prompt builders expect (display names).
+
+        ``extra_edges`` (canonical ids, inverse-augmented) are absent candidate edges from
+        ``cc_gcd.graph.candidate_generator``; they join ``graph`` (baseline B1+) and are also
+        listed under ``candidate_graph`` so decoders and metrics can tell them apart.
+        """
+        extra = sorted({tuple(e[:3]) for e in extra_edges}) if extra_edges is not None else None
+        extra_adj: Dict[str, List[Tuple[str, str]]] = defaultdict(list)
+        for h, r, t in extra or ():
+            extra_adj[h].append((r, t))
+        graph = self.neighbourhood(q["q_entity"], hops, max_fanout, extra_adj or None)
         d = self.display
-        return {
+        out = {
             "id": q["id"],
             "question": q["question"],
             "q_entity": [d(e) for e in q["q_entity"]],
@@ -108,3 +120,6 @@ class BrinkKG:
             "hard_triples": [[d(h), r, d(t)] for h, r, t in q["hard_triples"]],
             "graph": [[d(h), r, d(t)] for h, r, t in graph],
         }
+        if extra is not None:
+            out["candidate_graph"] = [[d(h), r, d(t)] for h, r, t in extra]
+        return out

@@ -9,9 +9,11 @@ __pycache__/
 # Third-party code (cloned at pinned commits by scripts/setup.sh)
 third_party/
 
-# Data (re-created by data_prep/download_brink.sh and data_prep/prepare_brink.py)
+# Data (re-created by data_prep/*, scripts/train_kge.py and scripts/build_candidates.py)
 data/raw/
 data/processed/
+data/kge/
+data/candidates/
 
 # Large run outputs; small summaries in results/*/ are committed
 results/GenPaths*/
