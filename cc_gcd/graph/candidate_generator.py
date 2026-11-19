@@ -59,11 +59,12 @@ RELATION_RANKINGS = ("kge", "kge_prob", "hybrid", "cooc")
 
 
 class Candidate(tuple):
-    """(head, relation, tail, kge_score, relation_rank, tail_rank); ranks are 0-based."""
+    """(head, relation, tail, kge_score, relation_rank, tail_rank, log_p); ranks are 0-based,
+    log_p = log P(tail | head, relation) under the KGE softmax (input to the prior pi)."""
     __slots__ = ()
 
-    def __new__(cls, h, r, t, score, rel_rank, tail_rank):
-        return super().__new__(cls, (h, r, t, score, rel_rank, tail_rank))
+    def __new__(cls, h, r, t, score, rel_rank, tail_rank, log_p=float("nan")):
+        return super().__new__(cls, (h, r, t, score, rel_rank, tail_rank, log_p))
 
 
 class CandidateGenerator:
@@ -264,7 +265,8 @@ class CandidateGenerator:
                 vi = int(row["tail"][a, b])
                 if vi < 0:
                     break
-                out.append(Candidate(u, self.sc.relations[ri], self.sc.entities[vi], float(row["tail_score"][a, b]), a, b))
+                out.append(Candidate(u, self.sc.relations[ri], self.sc.entities[vi], float(row["tail_score"][a, b]), a, b,
+                                     float(row["tail_logp"][a, b])))
         return out
 
     # ------------------------------------------------------------------ io
@@ -304,7 +306,8 @@ class CandidateGenerator:
                 vi = int(T["tail"][j, a, b])
                 if vi < 0:
                     break
-                out.append(Candidate(u, r, self.sc.entities[vi], float(T["tail_score"][j, a, b]), a, b))
+                lp = float(T["tail_logp"][j, a, b]) if "tail_logp" in T else float("nan")
+                out.append(Candidate(u, r, self.sc.entities[vi], float(T["tail_score"][j, a, b]), a, b, lp))
         return out
 
     def count(self, R: int, k: int) -> Dict[str, int]:

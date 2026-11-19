@@ -1,0 +1,119 @@
+{
+ "holdout_facts": 315,
+ "heads": 521,
+ "candidates": 103400,
+ "positives": 454,
+ "base_rate": 0.00439,
+ "R": 10,
+ "k": 20,
+ "rel_rank": "kge",
+ "test": {
+  "brier": 0.00438,
+  "ece": 0.001,
+  "ece_debiased_l2": 0.0018,
+  "auc": 0.9285,
+  "mean_pred": 0.0037,
+  "observed_rate": 0.0046,
+  "reliability": [
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0006,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0006,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0006,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0012,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0032,
+    "observed_rate": 0.0049,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0091,
+    "observed_rate": 0.0104,
+    "n": 1640
+   },
+   {
+    "mean_pred": 0.0415,
+    "observed_rate": 0.0506,
+    "n": 1640
+   }
+  ]
+ },
+ "coef_order": [
+  "log_p",
+  "raw_score",
+  "log1p_tail_rank",
+  "log1p_rel_rank"
+ ],
+ "coef": [
+  -0.3116,
+  1.0966,
+  -0.97,
+  0.0176
+ ],
+ "brink_removed_check": {
+  "brier": 0.00556,
+  "ece": 0.0022,
+  "ece_debiased_l2": 0.005,
+  "auc": 0.8973,
+  "mean_pred": 0.0039,
+  "observed_rate": 0.0057,
+  "candidates": 59200,
+  "removed_facts_among_them": 337,
+  "mean_pi_removed": 0.0257,
+  "mean_pi_other": 0.0038
+ }
+}

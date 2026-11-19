@@ -89,8 +89,39 @@ class GCRRunner:
         self.builder = PathGenerationWithAnswerPromptBuilder(self.model.tokenizer, "zero-shot", index_path_length=hops)
         self._predict = _load_prediction_fn()
 
+    def _predict_soft(self, s: dict, scores: List[float]) -> Optional[dict]:
+        """GCR step 1 with the soft trie (cc_gcd.decoding.soft_trie): same prompt, same allowed tokens as
+        GCR's KG-Trie, plus the lookahead prefix bias from the path scores."""
+        from transformers import LogitsProcessorList
+        from src.graph_constrained_decoding import GraphConstrainedDecoding
+        from cc_gcd.decoding.soft_trie import PrefixBiasProcessor, SoftTrie
+
+        if not s["paths"]:
+            return None
+        input_query, ground_paths, _ = self.builder.process_input(s, return_tire=False)
+        tok = self.model.tokenizer
+        start, end = self.builder.PATH_START_TOKEN, self.builder.PATH_END_TOKEN
+        seqs = tok([f"{start}{path_string(p)}{end}" for p in s["paths"]], padding=False,
+                   add_special_tokens=False).input_ids
+        trie = SoftTrie(seqs, scores)
+        sid, eid = tok.convert_tokens_to_ids(start), tok.convert_tokens_to_ids(end)
+        prompt = self.model.prepare_model_prompt(input_query)
+        enc = tok(prompt, return_tensors="pt", add_special_tokens=False)
+        gcd = GraphConstrainedDecoding(tok, trie, sid, eid, False)
+        res = self.model.model.generate(
+            input_ids=enc.input_ids.to(self.model.model.device), attention_mask=enc.attention_mask.to(self.model.model.device),
+            generation_config=self.model.generation_cfg, prefix_allowed_tokens_fn=gcd.allowed_tokens_fn,
+            logits_processor=LogitsProcessorList([PrefixBiasProcessor(trie, sid, eid)]),
+            return_dict_in_generate=True, pad_token_id=tok.eos_token_id)
+        n = enc.input_ids.shape[1]
+        pred = [tok.decode(r[n:], skip_special_tokens=True) for r in res.sequences]
+        return {"id": s["id"], "question": s["question"], "prediction": pred if len(pred) > 1 else pred[0],
+                "ground_truth": s["answer"], "ground_truth_paths": ground_paths}
+
     def run(self, samples: Iterable[dict], pred_file: str, path_mode: str = "multigraph", force: bool = False,
-            progress: Optional[Callable] = None) -> None:
+            progress: Optional[Callable] = None, lam: Optional[float] = None) -> None:
+        """``lam`` set: soft decoding with path score lam * sum of sample["edge_scores"] (absent edges;
+        observed edges score 0). ``lam`` None: GCR's hard KG-Trie."""
         enumerate_paths = PATH_MODES[path_mode]
         done = set()
         if os.path.exists(pred_file) and not force:
@@ -103,7 +134,12 @@ class GCRRunner:
                     continue
                 s = dict(s)
                 s["paths"] = enumerate_paths(s["graph"], s["q_entity"], self.hops)
-                res = self._predict(s, [], self.builder, self.model)
+                if lam is None:
+                    res = self._predict(s, [], self.builder, self.model)
+                else:
+                    es = s.get("edge_scores", {})
+                    scores = [lam * sum(es.get(tuple(e), 0.0) for e in p) for p in s["paths"]]
+                    res = self._predict_soft(s, scores)
                 if res is None:  # GCR returns None when the trie is empty
                     res = {"id": s["id"], "question": s["question"], "prediction": [], "ground_truth": s["answer"],
                            "ground_truth_paths": []}

@@ -25,6 +25,7 @@ Estimators:
     "logreg"      logistic regression on standardized structural features.
     "gbm"         histogram gradient boosting (sklearn; LightGBM is not a dependency) on
                   structural features + relation identity.
+    "gbm_struct"  the same without the relation identity, for transfer across graphs.
 Every estimator except "scar" is recalibrated with isotonic regression on a separate
 split of the training mechanism, then clipped (plan 4.4) so that log(1 - c) stays finite.
 """
@@ -47,9 +48,9 @@ EPS, EPS0, ETA = 0.02, 0.02, 0.005  # clipping defaults (plan 4.4)
 class Encoded:
     """Integer-encoded reference triples."""
 
-    def __init__(self, triples: Sequence[Triple]):
+    def __init__(self, triples: Sequence[Triple], relations: Optional[Sequence[str]] = None):
         ents = sorted({e for h, _, t in triples for e in (h, t)})
-        rels = sorted({r for _, r, _ in triples})
+        rels = sorted(relations) if relations is not None else sorted({r for _, r, _ in triples})
         self.e2id = {e: i for i, e in enumerate(ents)}
         self.r2id = {r: i for i, r in enumerate(rels)}
         self.h = np.array([self.e2id[h] for h, _, _ in triples], dtype=np.int64)
@@ -134,7 +135,7 @@ def _features(enc: Encoded, g: np.ndarray, o: np.ndarray) -> np.ndarray:
 class ObservationModel:
     def __init__(self, kind: str = "gbm", eps: float = EPS, eps0: float = EPS0, prior_strength: float = 20.0,
                  seed: int = 0):
-        if kind not in ("scar", "relation", "logreg", "gbm"):
+        if kind not in ("scar", "relation", "logreg", "gbm", "gbm_struct"):
             raise ValueError(kind)
         self.kind, self.eps, self.eps0, self.k, self.seed = kind, eps, eps0, prior_strength, seed
         self.iso = None
@@ -146,6 +147,8 @@ class ObservationModel:
             return self.rel_rate[rel] if rel.max(initial=-1) < len(self.rel_rate) else np.full(len(X), self.rate)
         if self.kind == "logreg":
             return self.clf.predict_proba((X - self.mu) / self.sd)[:, 1]
+        if self.kind == "gbm_struct":
+            return self.clf.predict_proba(X)[:, 1]
         return self.clf.predict_proba(np.column_stack([X, rel]))[:, 1]
 
     def fit(self, X: np.ndarray, rel: np.ndarray, y: np.ndarray, X_cal: np.ndarray, rel_cal: np.ndarray,
@@ -167,6 +170,11 @@ class ObservationModel:
                                                       categorical_features=cat, early_stopping=True,
                                                       validation_fraction=0.1, random_state=self.seed)
             self.clf.fit(np.column_stack([X, rel]), y)
+        elif self.kind == "gbm_struct":  # no relation identity: transferable across graphs
+            from sklearn.ensemble import HistGradientBoostingClassifier
+            self.clf = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.1, max_leaf_nodes=63,
+                                                      early_stopping=True, validation_fraction=0.1,
+                                                      random_state=self.seed).fit(X, y)
         if self.kind != "scar":
             from sklearn.isotonic import IsotonicRegression
             self.iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)

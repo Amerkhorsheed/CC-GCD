@@ -1,0 +1,119 @@
+{
+ "holdout_facts": 3963,
+ "heads": 4620,
+ "candidates": 821886,
+ "positives": 2709,
+ "base_rate": 0.0033,
+ "R": 10,
+ "k": 20,
+ "rel_rank": "hybrid",
+ "test": {
+  "brier": 0.00322,
+  "ece": 0.0002,
+  "ece_debiased_l2": 0.0,
+  "auc": 0.925,
+  "mean_pred": 0.0034,
+  "observed_rate": 0.0033,
+  "reliability": [
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0002,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0002,
+    "observed_rate": 0.0002,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0003,
+    "observed_rate": 0.0,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0003,
+    "observed_rate": 0.0001,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0003,
+    "observed_rate": 0.0,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0004,
+    "observed_rate": 0.0003,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0005,
+    "observed_rate": 0.0007,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0009,
+    "observed_rate": 0.001,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0021,
+    "observed_rate": 0.0022,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0036,
+    "observed_rate": 0.0037,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0088,
+    "observed_rate": 0.0081,
+    "n": 10602
+   },
+   {
+    "mean_pred": 0.0333,
+    "observed_rate": 0.0333,
+    "n": 10601
+   }
+  ]
+ },
+ "coef_order": [
+  "log_p",
+  "raw_score",
+  "log1p_tail_rank",
+  "log1p_rel_rank"
+ ],
+ "coef": [
+  -0.5549,
+  1.6747,
+  -0.7253,
+  -0.2112
+ ],
+ "brink_removed_check": {
+  "brier": 0.00476,
+  "ece": 0.0012,
+  "ece_debiased_l2": 0.0031,
+  "auc": 0.9239,
+  "mean_pred": 0.0039,
+  "observed_rate": 0.005,
+  "candidates": 146262,
+  "removed_facts_among_them": 727,
+  "mean_pi_removed": 0.0336,
+  "mean_pi_other": 0.0037
+ }
+}

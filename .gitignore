@@ -14,6 +14,8 @@ data/raw/
 data/processed/
 data/kge/
 data/candidates/
+data/e1_brink/
+data/e1_ikgqa/
 
 # Large run outputs; small summaries in results/*/ are committed
 results/GenPaths*/

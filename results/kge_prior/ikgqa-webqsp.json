@@ -1,0 +1,105 @@
+{
+ "holdout_facts": 34811,
+ "heads": 3000,
+ "candidates": 490270,
+ "positives": 2558,
+ "base_rate": 0.00522,
+ "R": 10,
+ "k": 20,
+ "rel_rank": "hybrid",
+ "test": {
+  "brier": 0.00436,
+  "ece": 0.0004,
+  "ece_debiased_l2": 0.0,
+  "auc": 0.9478,
+  "mean_pred": 0.0054,
+  "observed_rate": 0.0053,
+  "reliability": [
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 6373
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 6373
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 6373
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 6373
+   },
+   {
+    "mean_pred": 0.0002,
+    "observed_rate": 0.0003,
+    "n": 6373
+   },
+   {
+    "mean_pred": 0.0003,
+    "observed_rate": 0.0003,
+    "n": 6373
+   },
+   {
+    "mean_pred": 0.0004,
+    "observed_rate": 0.0003,
+    "n": 6373
+   },
+   {
+    "mean_pred": 0.0005,
+    "observed_rate": 0.0006,
+    "n": 6373
+   },
+   {
+    "mean_pred": 0.0006,
+    "observed_rate": 0.0009,
+    "n": 6373
+   },
+   {
+    "mean_pred": 0.001,
+    "observed_rate": 0.0006,
+    "n": 6373
+   },
+   {
+    "mean_pred": 0.001,
+    "observed_rate": 0.0014,
+    "n": 6372
+   },
+   {
+    "mean_pred": 0.0012,
+    "observed_rate": 0.0016,
+    "n": 6372
+   },
+   {
+    "mean_pred": 0.0018,
+    "observed_rate": 0.003,
+    "n": 6372
+   },
+   {
+    "mean_pred": 0.0056,
+    "observed_rate": 0.0055,
+    "n": 6372
+   },
+   {
+    "mean_pred": 0.0682,
+    "observed_rate": 0.0653,
+    "n": 6372
+   }
+  ]
+ },
+ "features": "rankfree",
+ "heads_sampled": 3000,
+ "coef_order": [
+  "log_p",
+  "raw_score"
+ ],
+ "coef": [
+  1.717,
+  0.4803
+ ]
+}
