@@ -70,7 +70,7 @@ def edge_scores(method: str, pi: np.ndarray, c_edge=None) -> tuple:
         z = np.log(pi) - np.log1p(-pi) + math.log(1 - c) - math.log(1 - F_DEFAULT)
         return float(arg[1]), log_sigmoid(z)
     if name == "CCe":
-        c = np.asarray(c_edge, dtype=float)
+        c = np.full(len(pi), 0.5) if c_edge is None else np.asarray(c_edge, dtype=float)
         if len(c) and np.isnan(c).any():  # guard: candidates are absent by construction, so this should not occur
             c = np.where(np.isnan(c), np.nanmean(c) if (~np.isnan(c)).any() else 0.5, c)
         c = np.clip(c, 0.02, 0.98)

@@ -38,7 +38,7 @@ from cc_gcd.calibration.kge_prior import KGEPrior  # noqa: E402
 from cc_gcd.data.ikgqa import IKGQA, level_tag  # noqa: E402
 from cc_gcd.graph.candidate_generator import CandidateGenerator  # noqa: E402
 from cc_gcd.kge.complex_kge import ComplExScorer  # noqa: E402
-from run_e1_brink import edge_scores  # noqa: E402
+from run_e1_brink import candidate_c, edge_scores  # noqa: E402
 
 
 def main():
@@ -97,6 +97,15 @@ def main():
         torch.cuda.empty_cache()
     if args.methods == ["none"]:
         return
+    for name in {m.split(":")[1] for m in args.methods if m.startswith("CCe:")}:
+        graph = os.path.join(ROOT, "data", "processed", "ikgqa", "webqsp", "kge_graph.tsv")
+        triples = [tuple(line.rstrip("\n").split("\t")) for line in open(graph, encoding="utf-8") if line.strip()]
+        cc = candidate_c(name, triples, {q: v["edges"] for q, v in cands.items()})
+        for q, v in cands.items():
+            v.setdefault("c", {})[name] = cc[q]
+        allc = np.concatenate([x for x in cc.values() if len(x)])
+        print(f"c(e) from {name}: mean {np.nanmean(allc):.3f}, p10 {np.nanpercentile(allc, 10):.3f}, "
+              f"p90 {np.nanpercentile(allc, 90):.3f}, missing {np.isnan(allc).mean():.3f}", flush=True)
 
     runner = GCRRunner(args.model_path, k=args.k, dtype="bf16", attn_implementation="sdpa", hops=2)
     summary_path = os.path.join(ROOT, "results", "e1_ikgqa", f"webqsp_{tag}.json")
@@ -118,7 +127,8 @@ def main():
                 if use_cands:
                     s2["candidate_graph"] = [list(e) for e in cq["edges"]]
                 if lam is not None:
-                    _, sc = edge_scores(method, cq["pi"])
+                    c_edge = cq["c"][method.split(":")[1]] if method.startswith("CCe:") else None
+                    _, sc = edge_scores(method, cq["pi"], c_edge)
                     s2["edge_scores"] = {e: float(v) for e, v in zip(cq["edges"], sc)}
                 yield s2
 

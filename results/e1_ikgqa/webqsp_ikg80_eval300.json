@@ -68,5 +68,19 @@
   "questions": 300,
   "seconds": 1744.2,
   "candidates": "local hybrid+sig R10 k5 hop1"
+ },
+ "CCe:wikidata_gbm_struct:1": {
+  "Hit": 0.7133,
+  "F1": 0.2327,
+  "paths_generated": 3000,
+  "paths_in_kg": 2428,
+  "faithful_path_rate": 0.8093,
+  "share_kg_paths_via_absent_edge": 0.0272,
+  "absent_edges_used": 71,
+  "absent_edges_used_true": 8,
+  "absent_edge_precision": 0.1127,
+  "questions": 300,
+  "seconds": 1725.8,
+  "candidates": "local hybrid+sig R10 k5 hop1"
  }
 }

@@ -7,8 +7,11 @@ project doc (Claude Docs, "الخطة البحثية المصحّحة لـ CC-GC
 
 Status (Nov 2026): baseline B1 (GCR) set up and smoke-tested; BRINK and IKGQA-WebQSP prepared; KGE
 candidate generator (plan section 5.1) built and measured on BRINK and IKGQA-WebQSP, wired into GCR
-(BRINK) as B1+; observation model c(e) (plan section 6) built and tested across masking mechanisms on
-BRINK. No CC-GCD decoder yet.
+(BRINK) as B1+; observation model c(e) (plan section 6) tested on synthetic mechanisms and on natural missingness
+from two Wikidata snapshots; calibrated KGE prior pi(e); CC-GCD decoder (soft KG-Trie with lookahead
+prefix bias) and the E1 comparison with GCR-Qwen2-0.5B on the RTX 3060 Ti: soft decoding with priced
+absent edges beats GCR's hard trie by ~1 point on BRINK-FB15k-237, but calibration does not beat a tuned
+fixed penalty (plan section 10: Reframe).
 
 ## Layout
 
@@ -33,6 +36,14 @@ BRINK. No CC-GCD decoder yet.
 | `cc_gcd/calibration/missingness.py` | Masking mechanisms A (MCAR), B (relation-selective), C (degree-biased), D (path-targeted, train questions) with exact retention = oracle c |
 | `cc_gcd/calibration/observation_model.py` | c(e): cross-fitted structural features, SCAR / per-relation / logistic / GBM + isotonic + clipping; evidence score s(e) |
 | `scripts/observation_lomo.py` | Mechanism-transfer matrix, leave-one-mechanism-out, BRINK's own missingness as held-out test (CPU, ~2 min) |
+| `data_prep/wikidata_dump_stream.py` | Stream a Wikidata JSON dump (resumable Range download, pigz), keep items with our Freebase IDs |
+| `data_prep/wikidata_snapshots.py` | Natural-missingness labels from the 2019-08-26 and current dumps (`build-dump`); API route kept for unthrottled networks |
+| `scripts/observation_natural.py` | c(e) on natural labels (head-disjoint), synthetic -> natural, natural -> BRINK |
+| `scripts/fit_natural_c.py` | Save the natural structural c(e) model used by CC-GCD with per-edge c |
+| `cc_gcd/calibration/kge_prior.py` | Calibrated KGE prior pi(e) from the KGE's own MCAR holdout (logistic + isotonic; rank-free variant) |
+| `scripts/calibrate_kge_prior.py`, `scripts/calibrate_kge_prior_ikgqa.py` | Fit pi on BRINK / IKGQA-WebQSP and check it on BRINK's removed facts |
+| `cc_gcd/decoding/soft_trie.py` | Soft KG-Trie with per-node lookahead values; prefix bias as a LogitsProcessor |
+| `scripts/run_e1_brink.py`, `scripts/run_e1_ikgqa.py` | E1: B1, B1+, B2, B4, CC-GCD (constant c = B5, per-edge c) with shared model, beams and candidates |
 | `scripts/reproduce_gcr_webqsp_gpu.sh` | Full two-step GCR reproduction on WebQSP (one GPU, no OpenAI key) |
 | `results/` | Small committed summaries (coverage, BRINK stats) |
 
@@ -62,6 +73,18 @@ python scripts/build_candidates_ikgqa.py --dataset webqsp                     # 
 # Observation model c(e) (CPU)
 python scripts/observation_lomo.py --dataset fb15k237                         # ~2 min
 python scripts/observation_lomo.py --dataset family
+# Natural missingness (two dump streams, ~3 h on this link), then c(e) on natural labels
+python data_prep/wikidata_dump_stream.py download https://archive.org/download/wikidata-20190826-all.json.gz/wikidata-20190826-all.json.gz \
+  | pigz -dc | python data_prep/wikidata_dump_stream.py filter --out data/raw/wikidata/dump_20190826.jsonl.gz
+python data_prep/wikidata_dump_stream.py download https://ftpmirror.your.org/pub/wikimedia/dumps/wikidatawiki/entities/latest-all.json.gz \
+  | pigz -dc | python data_prep/wikidata_dump_stream.py filter --out data/raw/wikidata/dump_20261117.jsonl.gz
+python data_prep/wikidata_snapshots.py build-dump --t0 2019-08-26 --old 20190826 --new 20261117
+python scripts/observation_natural.py --t0 2019-08-26 && python scripts/fit_natural_c.py
+# Calibrated KGE prior pi(e)
+python scripts/calibrate_kge_prior.py --dataset fb15k237
+python scripts/calibrate_kge_prior_ikgqa.py --device cpu
+# E1 (dev tuning on val[:150], then test)
+python scripts/run_e1_brink.py --dataset fb15k237 --split "val[:150]" --methods B1 B1+ B2:3 B4:1 CC:0.9:1 CCe:wikidata_gbm_struct:1
 # B1+: hard trie over observed + candidate edges, no penalty
 python scripts/run_gcr_brink.py --dataset fb15k237 --split "test[:5]" --candidates hybrid+sig --cand_R 10 --cand_k 5
 ```
@@ -253,6 +276,125 @@ true rate, so it is a diagnostic, not an estimator. On BRINK's missingness (rete
   calibration source, natural missingness from temporal Wikidata snapshots (section 6.2), is the next
   required step before c can carry the decoder; until then B5 (constant c, i.e. a tuned level) is the
   honest default, and H2 rests on the level being set per graph, not learned.
+
+**Natural missingness: Wikidata 2019-08-26 vs 2026-11-17** (`results/observation/wikidata-natural-*`).
+The Wikidata API throttles this connection (429 with 17-45 s waits; the SPARQL endpoint asked for
+1,000 s), so both JSON dumps (55 GB from archive.org, 157 GB current from a Wikimedia mirror) were
+streamed and filtered on the fly to items carrying one of BRINK-FB15k-237's Freebase IDs (P646); only
+2.6 MB + 1.5 MB of compact claims are stored. Universe: 13,631 entities mapped one-to-one in both
+snapshots. Label: an item-valued fact between universe entities that is true now was recorded at T0 or
+not. Dropped as "not yet true at T0": statements whose start time or point in time is after T0 (911), and
+the facts of 229 properties with fewer than 20 uses in the 2019 universe graph (2,692; schema change,
+not missingness). Facts present in 2019 but gone now stay in the 2019 graph for features (9,507) but get
+no label. Result: 164,082 labelled facts, 78.95% recorded at T0, 134 properties.
+
+| Head-disjoint test (32k facts) | ECE | Brier | AUC |
+| --- | --- | --- | --- |
+| Constant c (SCAR) | 0.031 | 0.166 | 0.50 |
+| Per relation | 0.018 | 0.130 | 0.785 |
+| Logistic regression | **0.011** | 0.138 | 0.766 |
+| GBM + relation id | 0.013 | **0.099** | **0.887** |
+| GBM, structural features only | 0.012 | 0.100 | 0.885 |
+
+- On natural missingness per-edge c works: the GBM cuts Brier by 40% against constant c and 23% against
+  per-relation c, and nearly all of it survives without the relation identity. Natural missingness is
+  clustered: an entity with no recorded facts of a relation at T0 is missing more of them (the
+  completeness signal of Galarraga et al., now on natural rather than synthetic deletions).
+- c trained on synthetic masking of the same 2019 graph (A, B, C; D needs questions) does not transfer to
+  the natural labels: AUC 0.47-0.59, ECE 0.06-0.21. The plan's preference for natural over synthetic
+  calibration (section 6.2) is borne out.
+- Natural Wikidata c transferred to BRINK-FB15k-237's rule-based missingness ranks weakly (AUC 0.60-0.62,
+  structural features) and its level is off (Brier after level matching 0.0296-0.0307 vs 0.0281 for the
+  constant). Natural c is a property of the graph and its editing history, not a universal constant.
+
+**Calibrated KGE prior pi(e)** (`results/kge_prior/`). The KGE was trained on 98% of the observed graph,
+so its 2% MCAR holdout is true and unseen. A generator that does not observe the holdout proposes
+candidates for the holdout heads; label = holdout fact. Logistic regression on log P(t | h, r), raw
+score, log tail rank and log relation rank (rank-free variant for IKGQA's subgraph-local candidates),
+then isotonic on a head-disjoint split. pi is relative to the reference graph (a true but unrecorded fact
+counts as false), so its values are small.
+
+| | Calibration candidates (positive share) | Held-out heads: AUC / ECE | BRINK removed hard facts among candidates: AUC | mean pi removed vs other |
+| --- | --- | --- | --- | --- |
+| Family | 103,400 (0.44%) | 0.929 / 0.001 | 0.897 | 0.026 vs 0.004 |
+| FB15k-237 | 821,886 (0.33%) | 0.925 / 0.0002 | 0.924 | 0.034 vs 0.004 |
+| IKGQA-WebQSP (rank-free, 3,000 heads) | 490,270 (0.52%) | 0.948 / 0.0004 | - | - |
+
+**CC-GCD decoder** (`cc_gcd/decoding/soft_trie.py`). GCR's KG-Trie is kept for the allowed tokens; the trie
+also holds the generator's absent candidate edges, and every path gets S = sum of s(e) (s = 0 for observed
+edges in every method, since the small, reference-relative pi would otherwise penalize observed edges;
+the methods then differ only in the price of absent edges). Each trie node stores V = max lambda * S over
+its completions, and a token moving from node u to child c gets the logit bias V(c) - V(u). The biases
+telescope to lambda * S(path) minus a per-question constant (checked in a unit test), so the path
+objective is exact while beams are steered as soon as a prefix commits to a weak branch (plan 4.5).
+Absent-edge scores: B2 -x per edge; B4 lambda log pi; CC-GCD lambda log sigmoid(logit pi + log(1 - c) -
+log(1 - f)), f = 0.01. With a constant c this is B4 plus a fixed per-edge shift, so only per-edge c can
+separate CC-GCD from tuned B2 + B4 (plan risk "B3 equals CC-GCD"). B3 (474 tuned per-relation penalties)
+needs hundreds of LLM runs per value and is not run; B6 (oracle c) has no per-edge truth on BRINK.
+
+**E1, the crucial experiment (plan section 10)** (`results/e1_brink/`, `results/e1_ikgqa/`). GCR step 1 with
+`rmanluo/GCR-Qwen2-0.5B-Instruct` (bf16, group beam search, k = 10) on the RTX 3060 Ti. The 8B checkpoint
+needs ~16 GB in bf16 and does not fit the 8 GB card; 4-bit quantization would change the logits the
+evidence is added to (plan 12.1), so it was not used. All methods share the model, prompt, beams and
+candidates (BRINK: the val-selected generator per graph, hop 1; IKGQA: local hybrid, R = 10, k = 5).
+Protocol fixed before testing: each family's setting chosen on dev by the target metric (BRINK: Hits@Hard,
+then Hits@Any, then F1, on val[:150] of FB15k-237; IKGQA: Hit, then F1, on 100 dev questions at IKG-80),
+then run once on test (BRINK-FB15k-237 test, 540 q; IKGQA eval, 300 q). Family test (198 q) and IKG-40
+reuse the FB15k-237 / IKG-80 settings unchanged. Paired bootstrap over questions (10,000 resamples,
+`scripts/e1_bootstrap.py`). Selected settings: B2 = 10 nats per absent edge, B4 lambda = 0.5 (BRINK) / 2
+(IKGQA), CC-GCD c = 0.9 with lambda = 2 (BRINK) / 1 (IKGQA), per-edge c from the natural Wikidata model with
+lambda = 2 (BRINK) / 1 (IKGQA).
+
+| BRINK-FB15k-237 test (540 q) | Hits@Any | Hits@Hard | F1 | KG paths via an absent edge | ... of which BRINK-removed (true) |
+| --- | --- | --- | --- | --- | --- |
+| B1 hard trie (GCR) | 0.759 | 0.254 | 0.151 | 0% | - |
+| B1+ candidates, no penalty | 0.732 | 0.244 | 0.123 | 42.6% | 8.5% |
+| B2 fixed penalty (10 nats) | 0.767 | 0.261 | 0.152 | 1.3% | 23.6% |
+| B4 KGE prior (lambda 0.5) | 0.767 | **0.267** | 0.140 | 25.1% | 9.9% |
+| CC-GCD, constant c = 0.9 (B5) | 0.765 | 0.257 | 0.153 | 0.4% | **56.3%** |
+| CC-GCD, per-edge c (natural Wikidata) | **0.770** | 0.265 | **0.153** | 1.4% | 29.5% |
+
+Against B1 (paired bootstrap, 95% interval): CC-GCD with per-edge c +1.1 Hits@Any [+0.4, +2.0] (p = 0.002) and
++1.1 Hits@Hard [+0.4, +2.0] (p = 0.001); B2 +0.7 / +0.7 (p = 0.014 / 0.017); CC-GCD constant c +0.6 Hits@Any
+(p = 0.047), F1 +0.12 (p = 0.013); B1+ -2.8 Hits@Any (p = 0.98 for "better") and -2.8 F1. Against the best
+simple penalty, per-edge CC-GCD vs B2: +0.4 Hits@Any and Hits@Hard [-0.4, +1.1] (p = 0.22), F1 +0.11 (p = 0.10);
+vs B4: Hits equal within noise, F1 +1.3 [+0.7, +2.0] (B4 buys its Hits@Hard with many absent edges and loses
+F1).
+
+| IKGQA-WebQSP (300 eval q) | IKG-80 Hit | IKG-80 F1 | IKG-40 Hit | IKG-40 F1 |
+| --- | --- | --- | --- | --- |
+| B1 hard trie | 0.707 | 0.231 | 0.803 | 0.294 |
+| B1+ no penalty | 0.707 | 0.234 | 0.793 | 0.292 |
+| B2 (10 nats) | 0.710 | 0.232 | 0.803 | 0.295 |
+| B4 (lambda 2) | 0.707 | 0.232 | 0.803 | 0.295 |
+| CC-GCD, c = 0.9 | **0.713** | **0.233** | **0.810** | **0.297** |
+| CC-GCD, per-edge c | **0.713** | 0.233 | 0.807 | 0.295 |
+
+IKGQA vs B1: CC-GCD (c = 0.9) Hit +0.7 at both levels (2 questions, p = 0.13) and F1 +0.26 / +0.27 [+0.03, +0.6]
+(p = 0.008 / 0.005); vs B4 F1 +0.2 (p = 0.06 / 0.05). Per-edge natural c is no better than constant c here.
+Family test (198 q, FB15k-237 settings transferred): B2 and both CC-GCD settings never take an absent edge and
+equal B1 exactly (Hits@Any 0.591, Hits@Hard 0.237); B1+ and B4 lose Hits@Hard (0.187, 0.207).
+
+Findings:
+- Unpenalized candidates hurt (B1+ on every benchmark): with no price, 11-66% of generated KG paths run
+  through hypothetical edges, of which only 6-15% are true.
+- Pricing absent edges recovers and slightly exceeds the hard trie: on BRINK-FB15k-237 per-edge CC-GCD gains
+  +1.1 points on both Hits metrics over GCR's hard trie (significant), and every soft method that keeps the
+  number of absent edges small is at least as good as B1. The kept absent edges are much more often true than
+  the candidate pool (CC-GCD constant c: 56% vs ~5% of candidates).
+- The calibration itself is not what buys the gain. Per-edge CC-GCD does not beat a tuned fixed penalty (B2)
+  on BRINK (+0.4, p = 0.22) and per-edge c is no better than constant c on IKGQA. All gains are about 1 point,
+  well below the plan's go threshold (2 points over the best of B3/B4, out of mechanism). By the decision
+  rule of plan section 10 this is **Reframe**, not Go: the soft trie with an explicit generator and a priced
+  absence beats the hard trie, while the calibrated observation model does not separate from simple penalties
+  with this model. Not Stop: CC-GCD does beat B1 with the same generator.
+- Caveats: one seed and one 0.5B model (the plan's main setting is the 8B GCR checkpoint); B3 (474 per-relation
+  penalties) and B6 were not run; IKGQA's two levels share the same 300 questions. B1's few "absent edges used"
+  on IKGQA come from beams that wrote a path without opening <PATH> (unconstrained) and matched a candidate.
+- Next steps that could change the verdict: the 8B checkpoint on a >= 24 GB GPU (`scripts/reproduce_gcr_webqsp_gpu.sh`
+  plus the E1 drivers with `--model_path rmanluo/GCR-Meta-Llama-3.1-8B-Instruct --dtype bf16`), more seeds, B3,
+  and a QA benchmark on a Wikidata graph where the natural c(e) model (Brier -40% vs constant on natural
+  missingness) is in its own domain instead of transferred to Freebase.
 
 ## Reference numbers (GCR paper, WebQSP test)
 

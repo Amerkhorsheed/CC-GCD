@@ -110,5 +110,33 @@
   "questions": 100,
   "seconds": 665.9,
   "candidates": "local hybrid+sig R10 k5 hop1"
+ },
+ "CCe:wikidata_gbm_struct:1": {
+  "Hit": 0.67,
+  "F1": 0.2166,
+  "paths_generated": 1000,
+  "paths_in_kg": 809,
+  "faithful_path_rate": 0.809,
+  "share_kg_paths_via_absent_edge": 0.0222,
+  "absent_edges_used": 20,
+  "absent_edges_used_true": 12,
+  "absent_edge_precision": 0.6,
+  "questions": 100,
+  "seconds": 648.1,
+  "candidates": "local hybrid+sig R10 k5 hop1"
+ },
+ "CCe:wikidata_gbm_struct:2": {
+  "Hit": 0.67,
+  "F1": 0.2097,
+  "paths_generated": 1000,
+  "paths_in_kg": 809,
+  "faithful_path_rate": 0.809,
+  "share_kg_paths_via_absent_edge": 0.0087,
+  "absent_edges_used": 9,
+  "absent_edges_used_true": 4,
+  "absent_edge_precision": 0.4444,
+  "questions": 100,
+  "seconds": 647.3,
+  "candidates": "local hybrid+sig R10 k5 hop1"
  }
 }
