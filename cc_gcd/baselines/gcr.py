@@ -119,27 +119,47 @@ class GCRRunner:
                 "ground_truth": s["answer"], "ground_truth_paths": ground_paths}
 
     def run(self, samples: Iterable[dict], pred_file: str, path_mode: str = "multigraph", force: bool = False,
-            progress: Optional[Callable] = None, lam: Optional[float] = None) -> None:
+            progress: Optional[Callable] = None, lam: Optional[float] = None) -> int:
         """``lam`` set: soft decoding with path score lam * sum of sample["edge_scores"] (absent edges;
-        observed edges score 0). ``lam`` None: GCR's hard KG-Trie."""
+        observed edges score 0). ``lam`` None: GCR's hard KG-Trie.
+
+        A generation that fails on a non-empty trie (GCR's generate_sentence swallows exceptions such as
+        CUDA out-of-memory and returns None) is retried once after emptying the CUDA cache and, if it fails
+        again, is *not* written, so a later call resumes it. Returns the number of such failures."""
+        import time
+        import torch
         enumerate_paths = PATH_MODES[path_mode]
         done = set()
         if os.path.exists(pred_file) and not force:
             with open(pred_file) as f:
                 done = {json.loads(line)["id"] for line in f}
         samples = progress(samples) if progress else samples
+        failed = 0
         with open(pred_file, "w" if force else "a") as fout:
             for s in samples:
                 if s["id"] in done:
                     continue
                 s = dict(s)
                 s["paths"] = enumerate_paths(s["graph"], s["q_entity"], self.hops)
-                if lam is None:
-                    res = self._predict(s, [], self.builder, self.model)
-                else:
+                def attempt():
+                    if lam is None:
+                        return self._predict(s, [], self.builder, self.model)
                     es = s.get("edge_scores", {})
                     scores = [lam * sum(es.get(tuple(e), 0.0) for e in p) for p in s["paths"]]
-                    res = self._predict_soft(s, scores)
+                    try:
+                        return self._predict_soft(s, scores)
+                    except torch.cuda.OutOfMemoryError:
+                        return None
+
+                res = attempt()
+                if res is None and s["paths"]:
+                    torch.cuda.empty_cache()
+                    time.sleep(5)
+                    res = attempt()
+                    if res is None:
+                        failed += 1
+                        torch.cuda.empty_cache()
+                        continue  # not written: resumed by the next call
                 if res is None:  # GCR returns None when the trie is empty
                     res = {"id": s["id"], "question": s["question"], "prediction": [], "ground_truth": s["answer"],
                            "ground_truth_paths": []}
@@ -157,6 +177,9 @@ class GCRRunner:
                         res[key] = s[key]
                 fout.write(json.dumps(res, ensure_ascii=False) + "\n")
                 fout.flush()
+        if failed:
+            print(f"[GCRRunner] {failed} generations failed and were not written; rerun to resume", flush=True)
+        return failed
 
 
 def faithful_rate(rows: List[dict]) -> dict:

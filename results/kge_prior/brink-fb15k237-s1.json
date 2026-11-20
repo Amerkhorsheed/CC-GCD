@@ -1,0 +1,121 @@
+{
+ "holdout_facts": 3963,
+ "heads": 4591,
+ "candidates": 817428,
+ "positives": 2827,
+ "base_rate": 0.00346,
+ "R": 10,
+ "k": 20,
+ "rel_rank": "hybrid",
+ "test": {
+  "brier": 0.00368,
+  "ece": 0.0006,
+  "ece_debiased_l2": 0.0011,
+  "auc": 0.925,
+  "mean_pred": 0.0034,
+  "observed_rate": 0.0038,
+  "reliability": [
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0001,
+    "n": 10895
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 10895
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0001,
+    "n": 10895
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 10895
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0001,
+    "n": 10894
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0003,
+    "n": 10894
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0004,
+    "n": 10894
+   },
+   {
+    "mean_pred": 0.0002,
+    "observed_rate": 0.0002,
+    "n": 10894
+   },
+   {
+    "mean_pred": 0.0002,
+    "observed_rate": 0.0003,
+    "n": 10894
+   },
+   {
+    "mean_pred": 0.0004,
+    "observed_rate": 0.0011,
+    "n": 10894
+   },
+   {
+    "mean_pred": 0.0006,
+    "observed_rate": 0.0015,
+    "n": 10894
+   },
+   {
+    "mean_pred": 0.0013,
+    "observed_rate": 0.0013,
+    "n": 10894
+   },
+   {
+    "mean_pred": 0.0043,
+    "observed_rate": 0.0038,
+    "n": 10894
+   },
+   {
+    "mean_pred": 0.0088,
+    "observed_rate": 0.0095,
+    "n": 10894
+   },
+   {
+    "mean_pred": 0.0339,
+    "observed_rate": 0.0386,
+    "n": 10894
+   }
+  ]
+ },
+ "features": "all",
+ "heads_sampled": 4591,
+ "coef_order": [
+  "log_p",
+  "raw_score",
+  "log1p_tail_rank",
+  "log1p_rel_rank"
+ ],
+ "coef": [
+  -0.6058,
+  1.6883,
+  -0.7368,
+  -0.2031
+ ],
+ "brink_removed_check": {
+  "brier": 0.00481,
+  "ece": 0.0013,
+  "ece_debiased_l2": 0.003,
+  "auc": 0.922,
+  "mean_pred": 0.0038,
+  "observed_rate": 0.005,
+  "candidates": 146511,
+  "removed_facts_among_them": 735,
+  "mean_pi_removed": 0.0324,
+  "mean_pi_other": 0.0037
+ }
+}

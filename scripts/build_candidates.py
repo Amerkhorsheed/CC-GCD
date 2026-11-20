@@ -118,10 +118,13 @@ def evaluate(gen, kg, questions, removed_aug, R, k, cand_hops):
 
 def diagnostics(gen, questions):
     """Where hard triples are lost: relation ranking, tail ranking, or the signature filter."""
-    rel_ranks, tail_ranks, filtered = [], [], 0
+    rel_ranks, tail_ranks, filtered, oov = [], [], 0, 0
     for q in questions:
         best_rel, best_tail = None, None
         for u, r, v in hard_edges(q):
+            if u not in gen.sc.e2id or v not in gen.sc.e2id or r not in gen.sc.r2id:
+                oov += 1  # e.g. an answer that only occurs in facts missing from the observed graph
+                continue
             rr = gen.relation_rank(u, r)
             tr = gen.tail_rank(u, r, v)
             filtered += tr < 0
@@ -140,26 +143,29 @@ def diagnostics(gen, questions):
         "hard_tail_in_top_k_given_relation": {k: round(float((tail_ranks < k).mean()), 4) for k in (1, 5, 10, 20, 50, 100)},
         "hard_tail_mrr_given_relation": round(float(np.mean(1.0 / (1 + tail_ranks))), 4),
         "hard_triples_removed_by_signature_filter": int(filtered),
+        "hard_triples_outside_kge_vocabulary": int(oov),
     }
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", choices=["family", "fb15k237"], required=True)
+    ap.add_argument("--dataset", choices=["family", "fb15k237", "wikidata"], required=True)
     ap.add_argument("--kge", default=None, help="model dir (default data/kge/brink-<dataset>)")
     ap.add_argument("--modes", nargs="+", default=list(MODES), choices=list(MODES))
     ap.add_argument("--budget", type=int, default=50, help="max R * k for the val-selected configuration")
     ap.add_argument("--R_max", type=int, default=10)
     ap.add_argument("--k_max", type=int, default=20)
     ap.add_argument("--rebuild", action="store_true")
+    ap.add_argument("--kge_tag", default="", help="alternate KGE, e.g. s1 -> data/kge/brink-<dataset>-s1")
     args = ap.parse_args()
+    tag = args.dataset + (f"-{args.kge_tag}" if args.kge_tag else "")
 
     root = os.path.join(ROOT, "data", "processed", "brink", args.dataset)
     kg = BrinkKG(root, version="incomplete", inverse=True)
     kg_dir = BrinkKG(root, version="incomplete", inverse=False)
     removed = [tuple(x) for x in (line.rstrip("\n").split("\t") for line in open(os.path.join(root, "removed.tsv"))) if len(x) == 3]
     removed_aug = set(augment(removed))
-    kge_dir = args.kge or os.path.join(ROOT, "data", "kge", f"brink-{args.dataset}")
+    kge_dir = args.kge or os.path.join(ROOT, "data", "kge", f"brink-{tag}")
     scorer = ComplExScorer(kge_dir)
     qs = {s: list(kg.questions(s)) for s in ("val", "test")}
 
@@ -170,7 +176,7 @@ def main():
         rel_rank, sig = MODES[mode]
         gen = CandidateGenerator(kg_dir.triples, scorer, rel_rank=rel_rank, signature_filter=sig,
                                  R_max=args.R_max, k_max=args.k_max)
-        path = os.path.join(ROOT, "data", "candidates", f"brink-{args.dataset}", f"{mode}.npz")
+        path = os.path.join(ROOT, "data", "candidates", f"brink-{tag}", f"{mode}.npz")
         t0 = time.time()
         if os.path.exists(path) and not args.rebuild:
             gen.load(path)
@@ -204,7 +210,7 @@ def main():
                                  "val": report["modes"][best[0]]["splits"]["val"]["grid_hop1"][best[1]],
                                  "test": report["modes"][best[0]]["splits"]["test"]["grid_hop1"][best[1]]}
     print("selected:", json.dumps(report["selected_on_val"], indent=1))
-    out = os.path.join(ROOT, "results", "candidates", f"brink-{args.dataset}.json")
+    out = os.path.join(ROOT, "results", "candidates", f"brink-{tag}.json")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w") as f:
         json.dump(report, f, indent=1)

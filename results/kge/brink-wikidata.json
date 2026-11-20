@@ -1,0 +1,124 @@
+{
+  "model": "ComplEx-N3 (reciprocal, 1-vs-all CE, Adagrad)",
+  "dim": 256,
+  "amp_bf16": false,
+  "neg_sample": 0,
+  "lr": 0.1,
+  "batch_size": 512,
+  "reg_weight_n3": 0.01,
+  "seed": 0,
+  "epochs_max": 100,
+  "best_epoch": 100,
+  "train_seconds": 4825.8,
+  "train_triples_canonical": 136263,
+  "valid_triples_canonical": 2780,
+  "entities": 13363,
+  "relations_with_inverse": 268,
+  "valid_mrr": 0.4511,
+  "valid_hits@1": 0.3766,
+  "valid_hits@10": 0.5888,
+  "history": [
+    {
+      "epoch": 5,
+      "train_ce": 2.864,
+      "valid_mrr": 0.4253
+    },
+    {
+      "epoch": 10,
+      "train_ce": 2.7254,
+      "valid_mrr": 0.4371
+    },
+    {
+      "epoch": 15,
+      "train_ce": 2.6733,
+      "valid_mrr": 0.4403
+    },
+    {
+      "epoch": 20,
+      "train_ce": 2.6442,
+      "valid_mrr": 0.4426
+    },
+    {
+      "epoch": 25,
+      "train_ce": 2.6248,
+      "valid_mrr": 0.4446
+    },
+    {
+      "epoch": 30,
+      "train_ce": 2.6105,
+      "valid_mrr": 0.4452
+    },
+    {
+      "epoch": 35,
+      "train_ce": 2.5995,
+      "valid_mrr": 0.4442
+    },
+    {
+      "epoch": 40,
+      "train_ce": 2.5909,
+      "valid_mrr": 0.4469
+    },
+    {
+      "epoch": 45,
+      "train_ce": 2.5836,
+      "valid_mrr": 0.4472
+    },
+    {
+      "epoch": 50,
+      "train_ce": 2.5774,
+      "valid_mrr": 0.4479
+    },
+    {
+      "epoch": 55,
+      "train_ce": 2.572,
+      "valid_mrr": 0.4475
+    },
+    {
+      "epoch": 60,
+      "train_ce": 2.5675,
+      "valid_mrr": 0.4481
+    },
+    {
+      "epoch": 65,
+      "train_ce": 2.5634,
+      "valid_mrr": 0.448
+    },
+    {
+      "epoch": 70,
+      "train_ce": 2.5598,
+      "valid_mrr": 0.4485
+    },
+    {
+      "epoch": 75,
+      "train_ce": 2.5565,
+      "valid_mrr": 0.4487
+    },
+    {
+      "epoch": 80,
+      "train_ce": 2.5536,
+      "valid_mrr": 0.449
+    },
+    {
+      "epoch": 85,
+      "train_ce": 2.5509,
+      "valid_mrr": 0.4495
+    },
+    {
+      "epoch": 90,
+      "train_ce": 2.5484,
+      "valid_mrr": 0.4496
+    },
+    {
+      "epoch": 95,
+      "train_ce": 2.5461,
+      "valid_mrr": 0.4489
+    },
+    {
+      "epoch": 100,
+      "train_ce": 2.544,
+      "valid_mrr": 0.4511
+    }
+  ],
+  "dataset": "brink-wikidata",
+  "graph": "kg_incomplete.tsv (observed graph only)"
+}

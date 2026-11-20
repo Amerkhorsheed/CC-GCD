@@ -9,6 +9,8 @@ the candidate generator (val-selected: ``--cand_mode``, R, k, candidates at hop 
     B4:l         soft: absent edge scores l * log pi(e) (calibrated KGE prior)
     CC:c:l       soft CC-GCD with constant c (B5): l * log sigmoid(logit pi + log(1-c) - log(1-f))
     CCe:name:l   soft CC-GCD with per-edge c(e) from ``data/observation/<name>.joblib`` (if present)
+    B3:a/b/c/d   per-relation penalty, one value per relation-frequency quartile (rarest first)
+    OR:x         upper bound (B6-style): true absent edges free, all others cost x nats
 
 Observed edges score 0 in every method. Reported per method: the official BRINK metrics,
 faithful-path rate, the share of generated KG paths that use an absent edge, and the share
@@ -56,11 +58,22 @@ def log_sigmoid(z):
     return -np.logaddexp(0.0, -z)
 
 
-def edge_scores(method: str, pi: np.ndarray, c_edge=None) -> tuple:
-    """(lambda, s per absent edge) for a method spec; None lambda = hard trie."""
+def edge_scores(method: str, pi: np.ndarray, c_edge=None, truth=None, group=None) -> tuple:
+    """(lambda, s per absent edge) for a method spec; None lambda = hard trie.
+
+    B3:a/b/c/d  per-relation penalty, one value per relation-frequency quartile (``group``, 0 = rarest).
+    OR:x        B6-style upper bound: absent edges that are true (``truth``, BRINK-removed facts) are free,
+                all others cost x nats; i.e. evidence that knows which hypothetical edges are true."""
     name, *arg = method.split(":")
     if name in ("B1", "B1+"):
         return None, None
+    if name == "B3":
+        pens = np.array([float(x) for x in arg[0].split("/")])
+        g = np.zeros(len(pi), dtype=int) if group is None else np.asarray(group, dtype=int)
+        return 1.0, -pens[g]
+    if name == "OR":
+        t = np.zeros(len(pi), dtype=bool) if truth is None else np.asarray(truth, dtype=bool)
+        return float(arg[0]), np.where(t, 0.0, -1.0)
     if name == "B2":
         return float(arg[0]), -np.ones_like(pi)
     if name == "B4":
@@ -100,7 +113,7 @@ def candidate_c(model_name: str, observed, edges_by_q: dict) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", choices=["family", "fb15k237"], default="fb15k237")
+    ap.add_argument("--dataset", choices=["family", "fb15k237", "wikidata"], default="fb15k237")
     ap.add_argument("--split", default="val[:150]")
     ap.add_argument("--methods", nargs="+", required=True)
     ap.add_argument("--model_path", default="rmanluo/GCR-Qwen2-0.5B-Instruct")
@@ -110,8 +123,10 @@ def main():
     ap.add_argument("--cand_R", type=int, default=10)
     ap.add_argument("--cand_k", type=int, default=5)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--kge_tag", default="", help="alternate KGE/candidates/prior, e.g. s1 (second seed)")
     args = ap.parse_args()
-    cand_mode = args.cand_mode or {"family": "kge+sig", "fb15k237": "hybrid+sig"}[args.dataset]
+    tag = args.dataset + (f"-{args.kge_tag}" if args.kge_tag else "")
+    cand_mode = args.cand_mode or {"family": "kge+sig", "fb15k237": "hybrid+sig", "wikidata": "hybrid+sig"}[args.dataset]
 
     split, lo, hi = parse_split(args.split)
     root = os.path.join(ROOT, "data", "processed", "brink", args.dataset)
@@ -119,14 +134,20 @@ def main():
     kg_obs = BrinkKG(root, version="incomplete", inverse=False)
     questions = list(kg.questions(split))[lo:hi]
     ids = {q["id"] for q in questions}
-    kge_dir = os.path.join(ROOT, "data", "kge", f"brink-{args.dataset}")
+    kge_dir = os.path.join(ROOT, "data", "kge", f"brink-{tag}")
     scorer = ComplExScorer(kge_dir)
     rr, sig = cand_mode.split("+")[0], cand_mode.endswith("+sig")
     gen = CandidateGenerator(kg_obs.triples, scorer, rel_rank=rr, signature_filter=sig)
-    gen.load(os.path.join(ROOT, "data", "candidates", f"brink-{args.dataset}", f"{cand_mode}.npz"))
+    gen.load(os.path.join(ROOT, "data", "candidates", f"brink-{tag}", f"{cand_mode}.npz"))
     prior = KGEPrior.from_dict(json.load(open(os.path.join(kge_dir, "pi_prior.json"))))
     removed = set(augment([tuple(x.split("\t")) for x in open(os.path.join(root, "removed.tsv")).read().splitlines() if x]))
     d = kg.display
+
+    # Relation-frequency quartiles (inverse-augmented observed graph) for B3.
+    from collections import Counter
+    rc = Counter(r for _, r, _ in augment(kg_obs.triples))
+    qs_ = np.quantile(np.array(list(rc.values())), [0.25, 0.5, 0.75])
+    rel_group = {r: int(np.searchsorted(qs_, n, side="right")) for r, n in rc.items()}
 
     # Candidates per question (shared by all methods), with pi and truth.
     cands = {}
@@ -136,7 +157,8 @@ def main():
         pi = prior.predict_from_dict(X) if len(c) else np.zeros(0)
         disp = [(d(x[0]), x[1], d(x[2])) for x in c]
         cands[q["id"]] = {"edges": [x[:3] for x in c], "disp": disp, "pi": pi,
-                          "true": {disp[i] for i, x in enumerate(c) if tuple(x[:3]) in removed}}
+                          "true": {disp[i] for i, x in enumerate(c) if tuple(x[:3]) in removed},
+                          "group": np.array([rel_group.get(x[1], 0) for x in c], dtype=int)}
 
     for name in {m.split(":")[1] for m in args.methods if m.startswith("CCe:")}:
         cc = candidate_c(name, kg_obs.triples, {q: v["edges"] for q, v in cands.items()})
@@ -148,12 +170,12 @@ def main():
 
     runner = GCRRunner(args.model_path, k=args.k, dtype=args.dtype, attn_implementation="sdpa", hops=2)
     gold_all = json.load(open(os.path.join(root, f"gold_{split}.json")))
-    summary_path = os.path.join(ROOT, "results", "e1_brink", f"{args.dataset}_{args.split.replace(':', '-')}.json")
+    summary_path = os.path.join(ROOT, "results", "e1_brink", f"{tag}_{args.split.replace(':', '-')}.json")
     summary = json.load(open(summary_path)) if os.path.exists(summary_path) else {}
     for method in args.methods:
-        tag = method.replace(":", "_")
-        out_dir = os.path.join(ROOT, "data", "e1_brink", args.dataset, os.path.basename(args.model_path),
-                               args.split.replace(":", "-"), tag)
+        mtag = method.replace(":", "_").replace("/", "-")  # method name as one path component
+        out_dir = os.path.join(ROOT, "data", "e1_brink", tag, os.path.basename(args.model_path),
+                               args.split.replace(":", "-"), mtag)
         os.makedirs(out_dir, exist_ok=True)
         lam, _ = edge_scores(method, np.ones(1) * 0.5)
         use_cands = method != "B1"
@@ -164,14 +186,18 @@ def main():
                 s = kg.sample(q, hops=2, extra_edges=cq["edges"] if use_cands else None)
                 if lam is not None:
                     c_edge = cq["c"][method.split(":")[1]] if method.startswith("CCe:") else None
-                    _, sc = edge_scores(method, cq["pi"], c_edge)
+                    truth = np.array([e in cq["true"] for e in cq["disp"]], dtype=bool)
+                    _, sc = edge_scores(method, cq["pi"], c_edge, truth=truth, group=cq["group"])
                     s["edge_scores"] = {e: float(v) for e, v in zip(cq["disp"], sc)}
                 yield s
 
         pred_file = os.path.join(out_dir, "predictions.jsonl")
         t0 = time.time()
-        runner.run(samples(), pred_file, force=args.force, lam=lam,
-                   progress=lambda it: tqdm(it, total=len(questions), desc=method, mininterval=30))
+        for _try in range(6):  # resume until every question has a prediction (e.g. after CUDA OOM)
+            if runner.run(samples(), pred_file, force=args.force and _try == 0, lam=lam,
+                   progress=lambda it: tqdm(it, total=len(questions), desc=method, mininterval=30)) == 0:
+                break
+            time.sleep(120)
         rows = [r for r in map(json.loads, open(pred_file)) if r["id"] in ids]
         pred = [{"id": r["id"], "raw_output": ", ".join(step1_answers(r["prediction"]))} for r in rows]
         json.dump(pred, open(os.path.join(out_dir, "brink_pred.json"), "w"), ensure_ascii=False)

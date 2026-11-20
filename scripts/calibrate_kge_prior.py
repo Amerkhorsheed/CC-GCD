@@ -26,19 +26,23 @@ from cc_gcd.data.brink import BrinkKG  # noqa: E402
 from cc_gcd.graph.candidate_generator import CandidateGenerator  # noqa: E402
 from cc_gcd.kge.complex_kge import ComplExScorer  # noqa: E402
 
-MODES = {"family": "kge", "fb15k237": "hybrid"}  # generator modes selected on val (results/candidates)
+MODES = {"family": "kge", "fb15k237": "hybrid", "wikidata": "hybrid"}  # generator modes selected on val (results/candidates)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", choices=["family", "fb15k237"], default="fb15k237")
+    ap.add_argument("--dataset", choices=["family", "fb15k237", "wikidata"], default="fb15k237")
     ap.add_argument("--R", type=int, default=10)
     ap.add_argument("--k", type=int, default=20)
+    ap.add_argument("--kge_tag", default="", help="alternate KGE, e.g. s1 -> data/kge/brink-<dataset>-s1")
+    ap.add_argument("--seed", type=int, default=0, help="the KGE's training seed (its holdout split)")
     args = ap.parse_args()
+    tag = args.dataset + (f"-{args.kge_tag}" if args.kge_tag else "")
     root = os.path.join(ROOT, "data", "processed", "brink", args.dataset)
     kg = BrinkKG(root, version="incomplete", inverse=False)
-    kge_dir = os.path.join(ROOT, "data", "kge", f"brink-{args.dataset}")
-    prior, report = calibrate(kg.triples, kge_dir, rel_rank=MODES[args.dataset], R=args.R, k=args.k)
+    kge_dir = os.path.join(ROOT, "data", "kge", f"brink-{tag}")
+    prior, report = calibrate(kg.triples, kge_dir, rel_rank=MODES[args.dataset], R=args.R, k=args.k,
+                              split_seed=args.seed)
     json.dump(prior.to_dict(), open(os.path.join(kge_dir, "pi_prior.json"), "w"))
 
     # Independent check on BRINK's removed hard facts (val + test topic entities).
@@ -71,7 +75,7 @@ def main():
     report["brink_removed_check"].update({"candidates": int(len(lab)), "removed_facts_among_them": int(lab.sum()),
                                           "mean_pi_removed": round(float(pi[lab == 1].mean()), 4),
                                           "mean_pi_other": round(float(pi[lab == 0].mean()), 4)})
-    out = os.path.join(ROOT, "results", "kge_prior", f"brink-{args.dataset}.json")
+    out = os.path.join(ROOT, "results", "kge_prior", f"brink-{tag}.json")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     json.dump(report, open(out, "w"), indent=1)
     t = report["test"]

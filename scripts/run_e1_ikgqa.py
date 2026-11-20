@@ -134,8 +134,11 @@ def main():
 
         pred_file = os.path.join(out_dir, "predictions.jsonl")
         t0 = time.time()
-        runner.run(gen_samples(), pred_file, force=args.force, lam=lam,
-                   progress=lambda it: tqdm(it, total=len(samples), desc=method, mininterval=30))
+        for _try in range(6):  # resume until every question has a prediction (e.g. after CUDA OOM)
+            if runner.run(gen_samples(), pred_file, force=args.force and _try == 0, lam=lam,
+                   progress=lambda it: tqdm(it, total=len(samples), desc=method, mininterval=30)) == 0:
+                break
+            time.sleep(120)
         ids = {s["id"] for s in samples}
         rows = [r for r in map(json.loads, open(pred_file)) if r["id"] in ids]
         hit = f1 = 0.0

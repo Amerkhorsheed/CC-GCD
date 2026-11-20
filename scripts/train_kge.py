@@ -24,7 +24,7 @@ from cc_gcd.kge.complex_kge import train_complex  # noqa: E402
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", choices=["family", "fb15k237", "ikgqa-webqsp"], required=True)
+    ap.add_argument("--dataset", choices=["family", "fb15k237", "wikidata", "ikgqa-webqsp"], required=True)
     ap.add_argument("--dim", type=int, default=256)
     ap.add_argument("--epochs", type=int, default=100)
     ap.add_argument("--lr", type=float, default=0.1)
@@ -34,6 +34,7 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=None)
     ap.add_argument("--amp", action="store_true", help="bf16 score matmul (large graphs)")
+    ap.add_argument("--device", default="cuda")
     ap.add_argument("--neg_sample", type=int, default=0, help="sampled softmax with this many shared negatives (0 = 1-vs-all)")
     args = ap.parse_args()
 
@@ -57,7 +58,7 @@ def main():
     out = args.out or os.path.join(ROOT, "data", "kge", name)
     metrics = train_complex(triples, out, dim=args.dim, epochs=args.epochs, lr=args.lr,
                             batch_size=args.batch_size, reg_weight=args.reg_weight, eval_every=args.eval_every,
-                            seed=args.seed, amp=args.amp, neg_sample=args.neg_sample, log=lambda s: print(s, flush=True))
+                            seed=args.seed, amp=args.amp, device=args.device, neg_sample=args.neg_sample, log=lambda s: print(s, flush=True))
     metrics["dataset"], metrics["graph"] = name, graph
     print(json.dumps({k: v for k, v in metrics.items() if k != "history"}, indent=2))
     if args.out is None:

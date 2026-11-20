@@ -84,7 +84,7 @@ def main():
     need = "gold.json" if args.bench == "brink" else "predictions.jsonl"
     methods = sorted(m for m in os.listdir(base) if os.path.exists(os.path.join(base, m, need))
                      and (args.bench == "ikgqa" or os.path.exists(os.path.join(base, m, "brink_pred.json"))))
-    ref = per(os.path.join(base, args.ref.replace(":", "_")))
+    ref = per(os.path.join(base, args.ref.replace(":", "_").replace("/", "-")))
     res = {}
     for m in methods:
         pq = per(os.path.join(base, m))

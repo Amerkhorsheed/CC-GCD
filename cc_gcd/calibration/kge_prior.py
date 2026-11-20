@@ -104,10 +104,10 @@ def head_bucket(h: str) -> float:
 
 def calibrate(triples: Sequence[Triple], kge_dir: str, rel_rank: str = "hybrid", R: int = 10, k: int = 20,
               rel_pool=None, features: str = "all", max_heads: int = 0, device: str = "cuda",
-              seed: int = 0) -> Tuple[KGEPrior, Dict]:
+              seed: int = 0, split_seed: int = 0) -> Tuple[KGEPrior, Dict]:
     """Fit pi on holdout facts as described in the module docstring; returns (prior, report)."""
     from cc_gcd.calibration.observation_model import calibration_metrics
-    train, hold = kge_holdout_split(triples)
+    train, hold = kge_holdout_split(triples, seed=split_seed)  # must match the KGE's training seed
     scorer = ComplExScorer(kge_dir, device=device)
     gen = CandidateGenerator(train, scorer, rel_rank=rel_rank, R_max=R, k_max=k, rel_pool=rel_pool)
     hold_aug = set(augment(hold))

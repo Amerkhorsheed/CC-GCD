@@ -1,0 +1,121 @@
+{
+ "holdout_facts": 2780,
+ "heads": 3492,
+ "candidates": 693172,
+ "positives": 1971,
+ "base_rate": 0.00284,
+ "R": 10,
+ "k": 20,
+ "rel_rank": "hybrid",
+ "test": {
+  "brier": 0.00259,
+  "ece": 0.0002,
+  "ece_debiased_l2": 0.0,
+  "auc": 0.9338,
+  "mean_pred": 0.0028,
+  "observed_rate": 0.0028,
+  "reliability": [
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0001,
+    "n": 8386
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0,
+    "n": 8386
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0001,
+    "n": 8386
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0001,
+    "n": 8386
+   },
+   {
+    "mean_pred": 0.0001,
+    "observed_rate": 0.0001,
+    "n": 8386
+   },
+   {
+    "mean_pred": 0.0002,
+    "observed_rate": 0.0004,
+    "n": 8386
+   },
+   {
+    "mean_pred": 0.0002,
+    "observed_rate": 0.0004,
+    "n": 8385
+   },
+   {
+    "mean_pred": 0.0002,
+    "observed_rate": 0.0002,
+    "n": 8385
+   },
+   {
+    "mean_pred": 0.0002,
+    "observed_rate": 0.0002,
+    "n": 8385
+   },
+   {
+    "mean_pred": 0.0005,
+    "observed_rate": 0.0007,
+    "n": 8385
+   },
+   {
+    "mean_pred": 0.0006,
+    "observed_rate": 0.0007,
+    "n": 8385
+   },
+   {
+    "mean_pred": 0.0013,
+    "observed_rate": 0.001,
+    "n": 8385
+   },
+   {
+    "mean_pred": 0.0015,
+    "observed_rate": 0.0017,
+    "n": 8385
+   },
+   {
+    "mean_pred": 0.0033,
+    "observed_rate": 0.0041,
+    "n": 8385
+   },
+   {
+    "mean_pred": 0.0329,
+    "observed_rate": 0.0329,
+    "n": 8385
+   }
+  ]
+ },
+ "features": "all",
+ "heads_sampled": 3492,
+ "coef_order": [
+  "log_p",
+  "raw_score",
+  "log1p_tail_rank",
+  "log1p_rel_rank"
+ ],
+ "coef": [
+  -0.4633,
+  1.0594,
+  -1.2257,
+  -0.5732
+ ],
+ "brink_removed_check": {
+  "brier": 0.00249,
+  "ece": 0.0004,
+  "ece_debiased_l2": 0.0,
+  "auc": 0.9198,
+  "mean_pred": 0.0023,
+  "observed_rate": 0.0025,
+  "candidates": 97726,
+  "removed_facts_among_them": 244,
+  "mean_pi_removed": 0.0362,
+  "mean_pi_other": 0.0022
+ }
+}

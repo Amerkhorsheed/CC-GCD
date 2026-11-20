@@ -1,0 +1,24 @@
+{
+ "B1": {
+  "num_examples": 150,
+  "num_missing_predictions": 0,
+  "Hits@Any": 0.0067,
+  "Precision": 0.0008,
+  "Recall": 0.0033,
+  "F1": 0.0013,
+  "Hits@Hard": 0.0,
+  "HHR": 0.0,
+  "paths_generated": 30,
+  "paths_in_kg": 24,
+  "faithful_path_rate": 0.8,
+  "paths_via_absent_edge": 0,
+  "share_kg_paths_via_absent_edge": 0.0,
+  "absent_edges_used": 0,
+  "absent_edges_used_true": 0,
+  "absent_edge_precision": null,
+  "questions": 150,
+  "seconds": 70.8,
+  "candidates": "hybrid+sig R10 k5 hop1",
+  "model": "rmanluo/GCR-Qwen2-0.5B-Instruct"
+ }
+}

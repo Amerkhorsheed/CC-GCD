@@ -43,6 +43,8 @@ fixed penalty (plan section 10: Reframe).
 | `cc_gcd/calibration/kge_prior.py` | Calibrated KGE prior pi(e) from the KGE's own MCAR holdout (logistic + isotonic; rank-free variant) |
 | `scripts/calibrate_kge_prior.py`, `scripts/calibrate_kge_prior_ikgqa.py` | Fit pi on BRINK / IKGQA-WebQSP and check it on BRINK's removed facts |
 | `cc_gcd/decoding/soft_trie.py` | Soft KG-Trie with per-node lookahead values; prefix bias as a LogitsProcessor |
+| `data_prep/build_wikidata_qa.py` | Wikidata-domain QA (2019 graph, answers missing in 2019) in BRINK format |
+| `scripts/e1_bootstrap.py` | Per-question metrics and paired bootstrap for E1 |
 | `scripts/run_e1_brink.py`, `scripts/run_e1_ikgqa.py` | E1: B1, B1+, B2, B4, CC-GCD (constant c = B5, per-edge c) with shared model, beams and candidates |
 | `scripts/reproduce_gcr_webqsp_gpu.sh` | Full two-step GCR reproduction on WebQSP (one GPU, no OpenAI key) |
 | `results/` | Small committed summaries (coverage, BRINK stats) |
@@ -388,13 +390,52 @@ Findings:
   rule of plan section 10 this is **Reframe**, not Go: the soft trie with an explicit generator and a priced
   absence beats the hard trie, while the calibrated observation model does not separate from simple penalties
   with this model. Not Stop: CC-GCD does beat B1 with the same generator.
-- Caveats: one seed and one 0.5B model (the plan's main setting is the 8B GCR checkpoint); B3 (474 per-relation
-  penalties) and B6 were not run; IKGQA's two levels share the same 300 questions. B1's few "absent edges used"
+- Caveats: one 0.5B model (the plan's main setting is the 8B GCR checkpoint, which does not fit this GPU; see
+  below); B3 is approximated by four relation-frequency groups; B6 is an evidence oracle (true hypothetical
+  edges free) rather than the true per-edge mechanism, which BRINK does not define; IKGQA's two levels share the
+  same 300 questions. Two KGE seeds on BRINK agree (below). B1's few "absent edges used"
   on IKGQA come from beams that wrote a path without opening <PATH> (unconstrained) and matched a candidate.
 - Next steps that could change the verdict: the 8B checkpoint on a >= 24 GB GPU (`scripts/reproduce_gcr_webqsp_gpu.sh`
-  plus the E1 drivers with `--model_path rmanluo/GCR-Meta-Llama-3.1-8B-Instruct --dtype bf16`), more seeds, B3,
-  and a QA benchmark on a Wikidata graph where the natural c(e) model (Brier -40% vs constant on natural
-  missingness) is in its own domain instead of transferred to Freebase.
+  plus the E1 drivers with `--model_path rmanluo/GCR-Meta-Llama-3.1-8B-Instruct --dtype bf16`); better evidence,
+  since the B6 bound shows +7 Hits@Hard is available to the same decoder; and an LLM that reads Wikidata
+  relations, to run E1 on the Wikidata-domain QA benchmark built below, where the natural c(e) model is in its
+  own domain and candidates add 10 points of reachable hard answers.
+
+**Follow-up runs: upper bound, per-relation penalties, second seed, 8B, Wikidata-domain QA.**
+
+- B6-style upper bound (BRINK-FB15k-237 test, 540 q): the same decoder with perfect evidence about the hypothetical
+  edges (BRINK-removed candidates free, all other candidates 10 nats) reaches Hits@Any 0.802 (+4.3 over B1),
+  Hits@Hard 0.324 (+7.0) and F1 0.161 (+1.0); 92% of the absent edges it uses are true. The generator and the
+  soft trie can therefore deliver gains well above the plan's 2-point threshold: the bottleneck is the quality of
+  the evidence (pi, c), not the decoding machinery.
+- B3 (per-relation penalties): one penalty per relation-frequency quartile (inverse-augmented observed graph),
+  coordinate search from 10 nats everywhere over {1, 3, 10} per quartile on FB15k-237 val[:150] (9 dev runs).
+  No quartile improves on 10 nats (lowering the penalty for any quartile costs 0.7-3.3 points of Hits@Any or
+  Hits@Hard on dev), so the selected B3 is the uniform B2:10; its test run reproduces B2:10 exactly (decoding is
+  deterministic). Per-relation pricing adds nothing over one tuned penalty here.
+- Second seed (KGE seed 1: its own 2% holdout, candidates, pi; holdout MRR 0.427, hard-fact recovery 57.2% vs 54.4%,
+  pi AUC on BRINK removals 0.922 vs 0.924). FB15k-237 test, seed 1 / seed 0: B1+ 0.739 / 0.732 Hits@Any; B2:10
+  0.769 / 0.767; CC-GCD c = 0.9 0.765 / 0.765; per-edge CC-GCD 0.772 / 0.770 (Hits@Hard 0.265 / 0.265). Per-edge
+  CC-GCD vs B1 with seed 1: +1.3 Hits@Any (p = 0.0008), +1.1 Hits@Hard (p = 0.002); vs B2:10 +0.4 (p = 0.13). Both
+  seeds give the same verdict. (Beam decoding is deterministic; question-level variance is in the bootstrap.)
+- Reliability: GCR's generate_sentence swallows exceptions; a first seed-1 run lost 352 of 540 questions to CUDA
+  out-of-memory as silent empty predictions. All other logs have zero OOM errors (checked); the runner now retries a
+  failed generation once and never writes it as empty, and the E1 drivers resume until every question is answered.
+- 8B: not runnable on this machine. GCR-Meta-Llama-3.1-8B needs 15 GB of bf16 weights; even NF4 (5.2 GB, embeddings
+  and head in 16-bit) plus the KV cache of GCR's setting (10 beams x ~2.5k tokens, 3.1 GB) and the CUDA context
+  is ~8.8 GB, above the 8 GB RTX 3060 Ti (4.8 GB free next to the desktop); the RTX 3060 is reserved and too
+  small for bf16 as well. Needs a >= 24 GB GPU.
+- Wikidata-domain QA (`data_prep/build_wikidata_qa.py`, BRINK format): the 2019-08-26 Wikidata graph over the
+  13,631 entities (139,043 facts) as the observed KG; 34,546 facts true in 2026 but missing in 2019 as the
+  natural "removed" set; "What is the <property> of <entity>?" for pairs with exactly one value missing in 2019
+  (the hard answer), 150 dev / 400 test questions on the head split of the natural c(e) model (test heads unseen
+  by it). KGE (CPU) holdout MRR 0.451; pi holdout AUC 0.934 and AUC 0.920 on the naturally missing facts. With
+  the generator (hybrid, R = 10, k = 5, selected on dev) the hard answer becomes reachable for 90.8% of test
+  questions instead of 80.5% (+10.3 points only through candidates), and the missing fact itself is a candidate
+  for 39%: far more headroom than BRINK. The LLM step does not transfer, though: GCR-Qwen2-0.5B was fine-tuned on
+  Freebase relation names and writes Freebase-style paths on Wikidata labels; the hard trie scores Hits@Any 0.7%
+  (1 of 150 dev questions), so E1 on this benchmark is at the floor and was stopped. It needs a GCR model trained
+  on Wikidata relations or a training-free instruction model (plan 12.1 option B).
 
 ## Reference numbers (GCR paper, WebQSP test)
 

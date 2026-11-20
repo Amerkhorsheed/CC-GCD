@@ -1,0 +1,102 @@
+{
+  "t0": "2019-08-26",
+  "entities": 13631,
+  "properties": 134,
+  "observed_2019": 139043,
+  "true_now": 164082,
+  "removed_true_now_missing_2019": 34546,
+  "splits": {
+    "val": {
+      "pool": 3996,
+      "questions": 150,
+      "relations": [
+        [
+          "native language",
+          14
+        ],
+        [
+          "languages spoken, written or signed",
+          12
+        ],
+        [
+          "writing language",
+          11
+        ],
+        [
+          "occupation",
+          9
+        ],
+        [
+          "genre",
+          7
+        ],
+        [
+          "language used",
+          6
+        ],
+        [
+          "different from",
+          5
+        ],
+        [
+          "headquarters location",
+          4
+        ],
+        [
+          "award received",
+          4
+        ],
+        [
+          "subclass of",
+          4
+        ]
+      ]
+    },
+    "test": {
+      "pool": 3810,
+      "questions": 400,
+      "relations": [
+        [
+          "writing language",
+          38
+        ],
+        [
+          "native language",
+          34
+        ],
+        [
+          "occupation",
+          30
+        ],
+        [
+          "languages spoken, written or signed",
+          28
+        ],
+        [
+          "award received",
+          18
+        ],
+        [
+          "nominated for",
+          13
+        ],
+        [
+          "instance of",
+          12
+        ],
+        [
+          "different from",
+          11
+        ],
+        [
+          "country",
+          9
+        ],
+        [
+          "place of death",
+          9
+        ]
+      ]
+    }
+  }
+}
