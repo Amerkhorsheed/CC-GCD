@@ -10,8 +10,9 @@ candidate generator (plan section 5.1) built and measured on BRINK and IKGQA-Web
 (BRINK) as B1+; observation model c(e) (plan section 6) tested on synthetic mechanisms and on natural missingness
 from two Wikidata snapshots; calibrated KGE prior pi(e); CC-GCD decoder (soft KG-Trie with lookahead
 prefix bias) and the E1 comparison with GCR-Qwen2-0.5B on the RTX 3060 Ti: soft decoding with priced
-absent edges beats GCR's hard trie by ~1 point on BRINK-FB15k-237, but calibration does not beat a tuned
-fixed penalty (plan section 10: Reframe).
+absent edges beats GCR's hard trie by ~1 point on BRINK-FB15k-237 and by 4-5 points (Hits@Hard) / 7-8 points
+(F1) on a Wikidata QA benchmark with natural missingness, but the calibrated observation model c(e) never beats
+a tuned KGE-prior penalty (B4) or a fixed penalty (B2/B3) on accuracy (plan section 10: Reframe).
 
 ## Layout
 
@@ -44,6 +45,7 @@ fixed penalty (plan section 10: Reframe).
 | `scripts/calibrate_kge_prior.py`, `scripts/calibrate_kge_prior_ikgqa.py` | Fit pi on BRINK / IKGQA-WebQSP and check it on BRINK's removed facts |
 | `cc_gcd/decoding/soft_trie.py` | Soft KG-Trie with per-node lookahead values; prefix bias as a LogitsProcessor |
 | `data_prep/build_wikidata_qa.py` | Wikidata-domain QA (2019 graph, answers missing in 2019) in BRINK format |
+| `scripts/finetune_wikidata_gcr.py` | LoRA-adapt GCR-Qwen2-0.5B to Wikidata relations (GCR's SFT format, training heads only) |
 | `scripts/e1_bootstrap.py` | Per-question metrics and paired bootstrap for E1 |
 | `scripts/run_e1_brink.py`, `scripts/run_e1_ikgqa.py` | E1: B1, B1+, B2, B4, CC-GCD (constant c = B5, per-edge c) with shared model, beams and candidates |
 | `scripts/reproduce_gcr_webqsp_gpu.sh` | Full two-step GCR reproduction on WebQSP (one GPU, no OpenAI key) |
@@ -397,9 +399,10 @@ Findings:
   on IKGQA come from beams that wrote a path without opening <PATH> (unconstrained) and matched a candidate.
 - Next steps that could change the verdict: the 8B checkpoint on a >= 24 GB GPU (`scripts/reproduce_gcr_webqsp_gpu.sh`
   plus the E1 drivers with `--model_path rmanluo/GCR-Meta-Llama-3.1-8B-Instruct --dtype bf16`); better evidence,
-  since the B6 bound shows +7 Hits@Hard is available to the same decoder; and an LLM that reads Wikidata
-  relations, to run E1 on the Wikidata-domain QA benchmark built below, where the natural c(e) model is in its
-  own domain and candidates add 10 points of reachable hard answers.
+  since the B6 bound shows +7 Hits@Hard is available to the same decoder. On the Wikidata-domain QA benchmark below
+  (natural missingness, in-domain model) the priced soft trie gains 4-5 points of Hits@Hard over B1, but the
+  calibrated c(e) still does not beat the tuned KGE-prior penalty: the contribution to claim is the explicit
+  generator + soft trie + calibrated pi, not the observation model (Reframe).
 
 **Follow-up runs: upper bound, per-relation penalties, second seed, 8B, Wikidata-domain QA.**
 
@@ -432,10 +435,34 @@ Findings:
   by it). KGE (CPU) holdout MRR 0.451; pi holdout AUC 0.934 and AUC 0.920 on the naturally missing facts. With
   the generator (hybrid, R = 10, k = 5, selected on dev) the hard answer becomes reachable for 90.8% of test
   questions instead of 80.5% (+10.3 points only through candidates), and the missing fact itself is a candidate
-  for 39%: far more headroom than BRINK. The LLM step does not transfer, though: GCR-Qwen2-0.5B was fine-tuned on
-  Freebase relation names and writes Freebase-style paths on Wikidata labels; the hard trie scores Hits@Any 0.7%
-  (1 of 150 dev questions), so E1 on this benchmark is at the floor and was stopped. It needs a GCR model trained
-  on Wikidata relations or a training-free instruction model (plan 12.1 option B).
+  for 39%: far more headroom than BRINK. The published GCR-Qwen2-0.5B was fine-tuned on Freebase relation names and
+  writes Freebase-style paths on Wikidata labels (hard trie: Hits@Any 0.7% on dev), so it was adapted with GCR's own
+  KG-specialization recipe (`scripts/finetune_wikidata_gcr.py`: LoRA r = 16, 1 epoch, 8,000 one-hop paths that were
+  *recorded in 2019*, training heads only; no dev/test head and no missing-in-2019 fact is seen; 4 min on the 3060 Ti).
+  This adds LLM training that the plan's main setting avoids, so these results are labelled as such.
+
+**E1 on Wikidata-domain QA (natural missingness, adapted GCR-0.5B)** (`results/e1_brink/wikidata_*`). Same protocol:
+settings chosen on 150 dev questions (B2 10 nats, B4 lambda 2, CC-GCD c = 0.9 lambda 1, per-edge c lambda 1), test on
+400; candidates hybrid, R = 10, k = 5.
+
+| Wikidata QA test (400 q) | Hits@Any | Hits@Hard | F1 | KG paths via an absent edge | ... of which true (missing in 2019) |
+| --- | --- | --- | --- | --- | --- |
+| B1 hard trie | 0.685 | 0.488 | 0.315 | 0% | - |
+| B1+ no penalty | 0.720 | **0.545** | 0.332 | 63.2% | 38.8% |
+| B2 (10 nats) | 0.723 | 0.528 | 0.346 | 39.9% | 51.7% |
+| B4 KGE prior (lambda 2) | 0.723 | 0.528 | **0.397** | 42.7% | **65.9%** |
+| CC-GCD, constant c = 0.9 | **0.728** | 0.535 | 0.391 | 45.8% | 60.0% |
+| CC-GCD, per-edge c (natural, in domain) | 0.725 | 0.535 | 0.393 | 46.9% | 59.8% |
+
+- Against B1, every method with candidates gains (paired bootstrap): CC-GCD +4.3 Hits@Any [+2.0, +6.8], +4.8 Hits@Hard
+  [+2.5, +7.3], +7.5 F1 [+5.9, +9.2] (all p < 0.001); per-edge CC-GCD +4.0 / +4.8 / +7.8; B4 +3.8 / +4.0 / +8.2. On natural
+  missingness with an in-domain model, H1 holds well above the 2-point bar. Even unpenalized candidates help here
+  (B1+ +5.8 Hits@Hard), unlike on BRINK: the missing facts are real and the candidate pool contains them.
+- Against the best simple baseline (B4), CC-GCD is within noise: +0.5 Hits@Any, +0.8 Hits@Hard (p = 0.17), F1 -0.7
+  (n.s.); per-edge c is no better than constant c. Against B2, the pi-based methods gain +4.4 to +5.1 F1 (p < 0.001):
+  the KGE plausibility pi is what buys precision; the observation model c adds nothing measurable. H2 fails again.
+- Parametric memory (plan H5): B1 already reaches Hits@Hard 0.49, mostly from beams that leave the trie and state
+  facts the model knows; the candidate gains are on top of that.
 
 ## Reference numbers (GCR paper, WebQSP test)
 

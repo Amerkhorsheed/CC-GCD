@@ -17,6 +17,7 @@ data/candidates/
 data/e1_brink/
 data/e1_ikgqa/
 data/observation/
+data/models/
 
 # Large run outputs; small summaries in results/*/ are committed
 results/GenPaths*/
