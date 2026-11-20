@@ -53,6 +53,7 @@ def main():
     ap.add_argument("--cand_R", type=int, default=10)
     ap.add_argument("--cand_k", type=int, default=5)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--cand_device", default="cuda", help="device for the candidate pre-pass (cpu keeps the GPU free)")
     args = ap.parse_args()
     sys.path.insert(0, GCR_ROOT)
     from src.utils.qa_utils import eval_f1, eval_hit
@@ -61,32 +62,41 @@ def main():
     samples = [s for qi, s in enumerate(ik.samples(args.level)) if (qi % 5 == 0) == (args.subset == "dev")][:args.limit]
     tag = f"{level_tag(args.level)}_{args.subset}{len(samples)}"
 
-    # Candidates (local tables), computed once and freed before the LLM is loaded.
-    kge_dir = os.path.join(ROOT, "data", "kge", "ikgqa-webqsp")
-    graph = os.path.join(ROOT, "data", "processed", "ikgqa", "webqsp", "kge_graph.tsv")
-    triples = [tuple(line.rstrip("\n").split("\t")) for line in open(graph, encoding="utf-8") if line.strip()]
-    scorer = ComplExScorer(kge_dir)
-    gen = CandidateGenerator(triples, scorer, rel_rank=args.cand_mode, rel_pool=50)
-    prior = KGEPrior.from_dict(json.load(open(os.path.join(kge_dir, "pi_prior.json"))))
-    cands = {}
-    t0 = time.time()
-    for s in samples:
-        obs = {(h.strip(), r, t.strip()) for h, r, t in s["graph"]}
-        nodes = {e for h, _, t in obs for e in (h, t)}
-        seeds = [e.strip() for e in s["q_entity"]]
-        c = [x for u in seeds for x in gen.candidates_from(u, gen.local_table(u, nodes), args.cand_R, args.cand_k)]
-        c = [x for x in c if (x[0], x[1], x[2]) not in obs]
-        X = np.array([[x[6], x[3]] for x in c]).reshape(-1, 2)
-        pi = prior.predict_from_dict(X) if len(c) else np.zeros(0)
-        deleted = set()
-        for h, r, t in s["removed_triples"]:
-            deleted.add((h.strip(), r, t.strip()))
-            deleted.add((t.strip(), "~" + r, h.strip()))
-        cands[s["id"]] = {"edges": [tuple(x[:3]) for x in c], "pi": pi,
-                          "true": {tuple(x[:3]) for x in c if tuple(x[:3]) in deleted}}
-    print(f"candidates for {len(samples)} questions in {time.time() - t0:.0f}s", flush=True)
-    del gen, scorer
-    torch.cuda.empty_cache()
+    # Candidates (local tables), computed once (cached on disk) and freed before the LLM is loaded.
+    import pickle
+    cache = os.path.join(ROOT, "data", "e1_ikgqa", f"cands_{tag}_{args.cand_mode}_R{args.cand_R}k{args.cand_k}.pkl")
+    if os.path.exists(cache):
+        cands = pickle.load(open(cache, "rb"))
+    else:
+        kge_dir = os.path.join(ROOT, "data", "kge", "ikgqa-webqsp")
+        graph = os.path.join(ROOT, "data", "processed", "ikgqa", "webqsp", "kge_graph.tsv")
+        triples = [tuple(line.rstrip("\n").split("\t")) for line in open(graph, encoding="utf-8") if line.strip()]
+        scorer = ComplExScorer(kge_dir, device=args.cand_device)
+        gen = CandidateGenerator(triples, scorer, rel_rank=args.cand_mode, rel_pool=50)
+        prior = KGEPrior.from_dict(json.load(open(os.path.join(kge_dir, "pi_prior.json"))))
+        cands = {}
+        t0 = time.time()
+        for s in samples:
+            obs = {(h.strip(), r, t.strip()) for h, r, t in s["graph"]}
+            nodes = {e for h, _, t in obs for e in (h, t)}
+            seeds = [e.strip() for e in s["q_entity"]]
+            c = [x for u in seeds for x in gen.candidates_from(u, gen.local_table(u, nodes), args.cand_R, args.cand_k)]
+            c = [x for x in c if (x[0], x[1], x[2]) not in obs]
+            X = np.array([[x[6], x[3]] for x in c]).reshape(-1, 2)
+            pi = prior.predict_from_dict(X) if len(c) else np.zeros(0)
+            deleted = set()
+            for h, r, t in s["removed_triples"]:
+                deleted.add((h.strip(), r, t.strip()))
+                deleted.add((t.strip(), "~" + r, h.strip()))
+            cands[s["id"]] = {"edges": [tuple(x[:3]) for x in c], "pi": pi,
+                              "true": {tuple(x[:3]) for x in c if tuple(x[:3]) in deleted}}
+        print(f"candidates for {len(samples)} questions in {time.time() - t0:.0f}s", flush=True)
+        os.makedirs(os.path.dirname(cache), exist_ok=True)
+        pickle.dump(cands, open(cache, "wb"))
+        del gen, scorer
+        torch.cuda.empty_cache()
+    if args.methods == ["none"]:
+        return
 
     runner = GCRRunner(args.model_path, k=args.k, dtype="bf16", attn_implementation="sdpa", hops=2)
     summary_path = os.path.join(ROOT, "results", "e1_ikgqa", f"webqsp_{tag}.json")
