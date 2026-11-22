@@ -12,7 +12,8 @@ from two Wikidata snapshots; calibrated KGE prior pi(e); CC-GCD decoder (soft KG
 prefix bias) and the E1 comparison with GCR-Qwen2-0.5B on the RTX 3060 Ti: soft decoding with priced
 absent edges beats GCR's hard trie by ~1 point on BRINK-FB15k-237 and by 4-5 points (Hits@Hard) / 7-8 points
 (F1) on a Wikidata QA benchmark with natural missingness, but the calibrated observation model c(e) never beats
-a tuned KGE-prior penalty (B4) or a fixed penalty (B2/B3) on accuracy (plan section 10: Reframe).
+a tuned KGE-prior penalty (B4) or a fixed penalty (B2/B3) on accuracy; with entity names anonymized (E5) the
+KGE-prior penalty gains +16 Hits@Hard over the hard trie and beats CC-GCD (plan section 10: Reframe).
 
 ## Layout
 
@@ -45,6 +46,8 @@ a tuned KGE-prior penalty (B4) or a fixed penalty (B2/B3) on accuracy (plan sect
 | `scripts/calibrate_kge_prior.py`, `scripts/calibrate_kge_prior_ikgqa.py` | Fit pi on BRINK / IKGQA-WebQSP and check it on BRINK's removed facts |
 | `cc_gcd/decoding/soft_trie.py` | Soft KG-Trie with per-node lookahead values; prefix bias as a LogitsProcessor |
 | `data_prep/build_wikidata_qa.py` | Wikidata-domain QA (2019 graph, answers missing in 2019) in BRINK format |
+| `data_prep/anonymize_wikidata_qa.py` | Anonymized copy of the Wikidata QA benchmark (entity names -> "entity N") for E5 |
+| `scripts/run_8b_on_3060.sh` | 8B GCR (4-bit) on the RTX 3060 for the owner-permitted case, with a Qwen watchdog |
 | `scripts/finetune_wikidata_gcr.py` | LoRA-adapt GCR-Qwen2-0.5B to Wikidata relations (GCR's SFT format, training heads only) |
 | `scripts/e1_bootstrap.py` | Per-question metrics and paired bootstrap for E1 |
 | `scripts/run_e1_brink.py`, `scripts/run_e1_ikgqa.py` | E1: B1, B1+, B2, B4, CC-GCD (constant c = B5, per-edge c) with shared model, beams and candidates |
@@ -424,10 +427,15 @@ Findings:
 - Reliability: GCR's generate_sentence swallows exceptions; a first seed-1 run lost 352 of 540 questions to CUDA
   out-of-memory as silent empty predictions. All other logs have zero OOM errors (checked); the runner now retries a
   failed generation once and never writes it as empty, and the E1 drivers resume until every question is answered.
-- 8B: not runnable on this machine. GCR-Meta-Llama-3.1-8B needs 15 GB of bf16 weights; even NF4 (5.2 GB, embeddings
-  and head in 16-bit) plus the KV cache of GCR's setting (10 beams x ~2.5k tokens, 3.1 GB) and the CUDA context
-  is ~8.8 GB, above the 8 GB RTX 3060 Ti (4.8 GB free next to the desktop); the RTX 3060 is reserved and too
-  small for bf16 as well. Needs a >= 24 GB GPU.
+- 8B: not runnable on the RTX 3060 Ti (GCR-Meta-Llama-3.1-8B: 15 GB bf16 weights; NF4 5.2 GB + KV cache of GCR's 10
+  beams x ~2.5k tokens 3.1 GB + context ~ 8.8 GB, above the 8 GB card with 4.8 GB free next to the desktop). The 12 GB
+  RTX 3060 holds it in 4-bit, and the machine's rules now let Amer run his own jobs there while the shared Qwen server
+  is stopped. Everything is prepared: checkpoint in `.hf/`, `bitsandbytes` 0.44.1, `--quant 4bit` in the E1 driver
+  (results go to `results/e1_brink/<dataset>_<split>_GCR-Meta-Llama-3.1-8B-Instruct-4bit.json`), and
+  `scripts/run_8b_on_3060.sh` (refuses while Qwen answers; stops the job if Qwen starts). It could not be started
+  from the session that ran this work: `sg`/`newgrp` are not installed and that session predates the gpu3060
+  membership. From a fresh login: `scripts/run_8b_on_3060.sh e8b.log --dataset fb15k237 --split "test[:200]"
+  --methods B1 B2:10 B4:0.5 CC:0.9:2 CCe:wikidata_gbm_struct:2`. 4-bit changes the logits (plan 12.1), so label it.
 - Wikidata-domain QA (`data_prep/build_wikidata_qa.py`, BRINK format): the 2019-08-26 Wikidata graph over the
   13,631 entities (139,043 facts) as the observed KG; 34,546 facts true in 2026 but missing in 2019 as the
   natural "removed" set; "What is the <property> of <entity>?" for pairs with exactly one value missing in 2019
@@ -461,8 +469,24 @@ settings chosen on 150 dev questions (B2 10 nats, B4 lambda 2, CC-GCD c = 0.9 la
 - Against the best simple baseline (B4), CC-GCD is within noise: +0.5 Hits@Any, +0.8 Hits@Hard (p = 0.17), F1 -0.7
   (n.s.); per-edge c is no better than constant c. Against B2, the pi-based methods gain +4.4 to +5.1 F1 (p < 0.001):
   the KGE plausibility pi is what buys precision; the observation model c adds nothing measurable. H2 fails again.
-- Parametric memory (plan H5): B1 already reaches Hits@Hard 0.49, mostly from beams that leave the trie and state
-  facts the model knows; the candidate gains are on top of that.
+- Parametric memory (plan 7.3, E5; `data_prep/anonymize_wikidata_qa.py`, method B0 = same prompt and beams with no
+  trie). With names, the no-KG B0 reaches Hits@Any 0.685 (= B1) and Hits@Hard 0.585, +9.8 over B1 (p < 0.001): the
+  named benchmark partly measures pretraining memory, and the 2019 trie even steers away from facts the model
+  knows. With every entity renamed "entity N" (KG, KGE, candidates and pi unchanged; B0 scores 0 by construction):
+
+  | Wikidata QA test, anonymized (400 q) | Hits@Any | Hits@Hard | F1 | absent edges used that are true |
+  | --- | --- | --- | --- | --- |
+  | B1 hard trie | 0.480 | 0.245 | 0.173 | - |
+  | B1+ no penalty | 0.468 | 0.273 | 0.154 | 10.0% |
+  | B4 KGE prior (lambda 2) | **0.633** | **0.405** | **0.218** | 46.8% |
+  | CC-GCD, constant c = 0.9 | 0.593 | 0.363 | 0.200 | 29.3% |
+  | CC-GCD, per-edge c | 0.598 | 0.368 | 0.199 | 27.8% |
+
+  Without names, the evidence carries the gain: B4 +15.3 Hits@Any [+11.3, +19.3] and +16.0 Hits@Hard [+12.0, +20.0]
+  over B1, CC-GCD +11.3 / +11.8 and +11.8 / +12.3 (all p < 0.001), while unpenalized candidates do not help (only 10%
+  of the absent edges they use are true). H5 holds: the soft-trie gains are not memory. But CC-GCD is significantly
+  worse than B4 here (-3.5 to -4.3 points, p < 0.001): the calibrated KGE prior pi is the useful evidence; the
+  observation model c makes the absence price worse, not better.
 
 ## Reference numbers (GCR paper, WebQSP test)
 

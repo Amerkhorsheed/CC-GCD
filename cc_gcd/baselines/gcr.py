@@ -74,12 +74,12 @@ def _load_prediction_fn() -> Callable:
 
 class GCRRunner:
     def __init__(self, model_path: str, k: int = 10, generation_mode: str = "group-beam", dtype: str = "bf16",
-                 attn_implementation: str = "sdpa", max_new_tokens: int = 1024, hops: int = 2):
+                 attn_implementation: str = "sdpa", max_new_tokens: int = 1024, hops: int = 2, quant: str = "none"):
         from src.llms.graph_constrained_decoding_model import GraphConstrainedDecodingModel
         from src.qa_prompt_builder import PathGenerationWithAnswerPromptBuilder
 
         args = argparse.Namespace(
-            model_path=model_path, maximun_token=4096, max_new_tokens=max_new_tokens, dtype=dtype, quant="none",
+            model_path=model_path, maximun_token=4096, max_new_tokens=max_new_tokens, dtype=dtype, quant=quant,
             attn_implementation=attn_implementation, generation_mode=generation_mode, k=k, chat_model=True,
             use_assistant_model=False, assistant_model_path=None,
         )
@@ -118,6 +118,21 @@ class GCRRunner:
         return {"id": s["id"], "question": s["question"], "prediction": pred if len(pred) > 1 else pred[0],
                 "ground_truth": s["answer"], "ground_truth_paths": ground_paths}
 
+    def _predict_free(self, s: dict) -> Optional[dict]:
+        """B0: the same prompt and beams with no KG-Trie (no constrained decoding), for the parametric-memory
+        control (plan 7.3)."""
+        input_query, _, _ = self.builder.process_input({**s, "graph": []}, return_tire=False)
+        tok = self.model.tokenizer
+        prompt = self.model.prepare_model_prompt(input_query)
+        enc = tok(prompt, return_tensors="pt", add_special_tokens=False)
+        res = self.model.model.generate(
+            input_ids=enc.input_ids.to(self.model.model.device), attention_mask=enc.attention_mask.to(self.model.model.device),
+            generation_config=self.model.generation_cfg, return_dict_in_generate=True, pad_token_id=tok.eos_token_id)
+        n = enc.input_ids.shape[1]
+        pred = [tok.decode(r[n:], skip_special_tokens=True) for r in res.sequences]
+        return {"id": s["id"], "question": s["question"], "prediction": pred if len(pred) > 1 else pred[0],
+                "ground_truth": s["answer"], "ground_truth_paths": []}
+
     def run(self, samples: Iterable[dict], pred_file: str, path_mode: str = "multigraph", force: bool = False,
             progress: Optional[Callable] = None, lam: Optional[float] = None) -> int:
         """``lam`` set: soft decoding with path score lam * sum of sample["edge_scores"] (absent edges;
@@ -140,8 +155,13 @@ class GCRRunner:
                 if s["id"] in done:
                     continue
                 s = dict(s)
-                s["paths"] = enumerate_paths(s["graph"], s["q_entity"], self.hops)
+                s["paths"] = [] if s.get("no_kg") else enumerate_paths(s["graph"], s["q_entity"], self.hops)
                 def attempt():
+                    if s.get("no_kg"):
+                        try:
+                            return self._predict_free(s)
+                        except torch.cuda.OutOfMemoryError:
+                            return None
                     if lam is None:
                         return self._predict(s, [], self.builder, self.model)
                     es = s.get("edge_scores", {})
@@ -152,7 +172,7 @@ class GCRRunner:
                         return None
 
                 res = attempt()
-                if res is None and s["paths"]:
+                if res is None and (s["paths"] or s.get("no_kg")):
                     torch.cuda.empty_cache()
                     time.sleep(5)
                     res = attempt()

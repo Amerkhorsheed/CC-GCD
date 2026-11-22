@@ -130,5 +130,27 @@
   "seconds": 58.3,
   "candidates": "hybrid+sig R10 k5 hop1",
   "model": "data/models/gcr-qwen2-0.5b-wikidata"
+ },
+ "B0": {
+  "num_examples": 400,
+  "num_missing_predictions": 0,
+  "Hits@Any": 0.685,
+  "Precision": 0.17,
+  "Recall": 0.6131,
+  "F1": 0.2479,
+  "Hits@Hard": 0.585,
+  "HHR": 0.854,
+  "paths_generated": 4000,
+  "paths_in_kg": 0,
+  "faithful_path_rate": 0.0,
+  "paths_via_absent_edge": 0,
+  "share_kg_paths_via_absent_edge": null,
+  "absent_edges_used": 873,
+  "absent_edges_used_true": 563,
+  "absent_edge_precision": 0.6449,
+  "questions": 400,
+  "seconds": 601.7,
+  "candidates": "hybrid+sig R10 k5 hop1",
+  "model": "data/models/gcr-qwen2-0.5b-wikidata"
  }
 }

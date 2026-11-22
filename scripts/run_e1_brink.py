@@ -3,6 +3,7 @@
 All methods share the model, the prompt, the beam settings (GCR: group beam search, k = 10) and
 the candidate generator (val-selected: ``--cand_mode``, R, k, candidates at hop 1). Methods:
 
+    B0           no KG (same prompt and beams, no trie): parametric-memory baseline
     B1           hard KG-Trie on the observed graph (GCR)
     B1+          hard KG-Trie on observed + candidate edges (no penalty)
     B2:x         soft: every absent edge costs x nats
@@ -65,7 +66,7 @@ def edge_scores(method: str, pi: np.ndarray, c_edge=None, truth=None, group=None
     OR:x        B6-style upper bound: absent edges that are true (``truth``, BRINK-removed facts) are free,
                 all others cost x nats; i.e. evidence that knows which hypothetical edges are true."""
     name, *arg = method.split(":")
-    if name in ("B1", "B1+"):
+    if name in ("B0", "B1", "B1+"):
         return None, None
     if name == "B3":
         pens = np.array([float(x) for x in arg[0].split("/")])
@@ -113,11 +114,13 @@ def candidate_c(model_name: str, observed, edges_by_q: dict) -> dict:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--dataset", choices=["family", "fb15k237", "wikidata"], default="fb15k237")
+    ap.add_argument("--dataset", choices=["family", "fb15k237", "wikidata", "wikidata-anon"], default="fb15k237")
     ap.add_argument("--split", default="val[:150]")
     ap.add_argument("--methods", nargs="+", required=True)
     ap.add_argument("--model_path", default="rmanluo/GCR-Qwen2-0.5B-Instruct")
     ap.add_argument("--dtype", default="bf16")
+    ap.add_argument("--quant", default="none", choices=["none", "4bit", "8bit"],
+                    help="bitsandbytes quantization (8B on a 12 GB card); changes logits, so results are labelled")
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--cand_mode", default=None, help="default: the val-selected mode for the dataset")
     ap.add_argument("--cand_R", type=int, default=10)
@@ -126,7 +129,8 @@ def main():
     ap.add_argument("--kge_tag", default="", help="alternate KGE/candidates/prior, e.g. s1 (second seed)")
     args = ap.parse_args()
     tag = args.dataset + (f"-{args.kge_tag}" if args.kge_tag else "")
-    cand_mode = args.cand_mode or {"family": "kge+sig", "fb15k237": "hybrid+sig", "wikidata": "hybrid+sig"}[args.dataset]
+    cand_mode = args.cand_mode or {"family": "kge+sig", "fb15k237": "hybrid+sig", "wikidata": "hybrid+sig",
+                              "wikidata-anon": "hybrid+sig"}[args.dataset]
 
     split, lo, hi = parse_split(args.split)
     root = os.path.join(ROOT, "data", "processed", "brink", args.dataset)
@@ -168,22 +172,27 @@ def main():
         print(f"c(e) from {name}: mean {np.nanmean(allc):.3f}, p10 {np.nanpercentile(allc, 10):.3f}, "
               f"p90 {np.nanpercentile(allc, 90):.3f}", flush=True)
 
-    runner = GCRRunner(args.model_path, k=args.k, dtype=args.dtype, attn_implementation="sdpa", hops=2)
+    runner = GCRRunner(args.model_path, k=args.k, dtype=args.dtype, attn_implementation="sdpa", hops=2, quant=args.quant)
     gold_all = json.load(open(os.path.join(root, f"gold_{split}.json")))
-    summary_path = os.path.join(ROOT, "results", "e1_brink", f"{tag}_{args.split.replace(':', '-')}.json")
+    # Quantized (8B) runs get their own summary file; full-precision runs keep the original names.
+    msfx = "" if args.quant == "none" else "_" + os.path.basename(args.model_path) + f"-{args.quant}"
+    summary_path = os.path.join(ROOT, "results", "e1_brink", f"{tag}_{args.split.replace(':', '-')}{msfx}.json")
     summary = json.load(open(summary_path)) if os.path.exists(summary_path) else {}
     for method in args.methods:
         mtag = method.replace(":", "_").replace("/", "-")  # method name as one path component
-        out_dir = os.path.join(ROOT, "data", "e1_brink", tag, os.path.basename(args.model_path),
+        model_tag = os.path.basename(args.model_path) + ("" if args.quant == "none" else f"-{args.quant}")
+        out_dir = os.path.join(ROOT, "data", "e1_brink", tag, model_tag,
                                args.split.replace(":", "-"), mtag)
         os.makedirs(out_dir, exist_ok=True)
         lam, _ = edge_scores(method, np.ones(1) * 0.5)
-        use_cands = method != "B1"
+        use_cands = method not in ("B0", "B1")
 
         def samples():
             for q in questions:
                 cq = cands[q["id"]]
                 s = kg.sample(q, hops=2, extra_edges=cq["edges"] if use_cands else None)
+                if method == "B0":  # no KG: same model, prompt and beams, unconstrained (plan 7.3)
+                    s["no_kg"] = True
                 if lam is not None:
                     c_edge = cq["c"][method.split(":")[1]] if method.startswith("CCe:") else None
                     truth = np.array([e in cq["true"] for e in cq["disp"]], dtype=bool)
