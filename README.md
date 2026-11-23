@@ -427,14 +427,30 @@ Findings:
 - Reliability: GCR's generate_sentence swallows exceptions; a first seed-1 run lost 352 of 540 questions to CUDA
   out-of-memory as silent empty predictions. All other logs have zero OOM errors (checked); the runner now retries a
   failed generation once and never writes it as empty, and the E1 drivers resume until every question is answered.
-- 8B (GCR-Meta-Llama-3.1-8B-Instruct): does not fit the 8 GB RTX 3060 Ti, and the 12 GB RTX 3060 could not be
-  opened from this session (`sg`/`newgrp` are not installed and the session predates the gpu3060 membership). It was
-  therefore run on CPU in fp32 (unquantized) on the first 100 FB15k-237 test questions (~2.5 min per question).
-  B1: Hits@Any 0.89, Hits@Hard 0.31, F1 0.226, faithful paths 1.0; B2:10: 0.89 / 0.32 / 0.231. The 0.5B on the same
-  100 questions: B1 0.78 / 0.28 / 0.165, B2:10 0.78 / 0.28 / 0.161, CCe 0.79 / 0.29 / 0.163. CCe:wikidata_gbm_struct:2 on the 8B:
-  0.89 / 0.32 / 0.230. Paired bootstrap vs B1: Hits@Hard +1.0 (p = 0.36), F1 +0.0038 (p = 0.03); vs B2:10: F1 -0.0006
-  (p = 0.55). So the 8B shows the same pattern as the 0.5B: a soft trie helps a little over the hard trie, and
-  per-edge c(e) adds nothing over a fixed penalty. The 8B raises the B1 level by ~11 Hits@Any. On a GPU, `scripts/run_8b_on_3060.sh` (4-bit, Qwen watchdog) runs the full set from a fresh login.
+- 8B (GCR-Meta-Llama-3.1-8B-Instruct), FB15k-237 test. The 8 GB RTX 3060 Ti cannot hold it and the RTX 3060 is
+  not reachable from the Claude app (its shells run with NoNewPrivs, so `su`/`sg`/`sudo` fail). Two runs:
+  - **4-bit NF4 on an RTX 5070 Ti Laptop (12 GB, second machine), all 540 questions**
+    (`results/e1_brink/fb15k237_test_GCR-Meta-Llama-3.1-8B-Instruct-4bit.json`, bootstrap files beside it):
+
+    | Method | Hits@Any | Hits@Hard | F1 | vs B1 |
+    |---|---|---|---|---|
+    | B1 hard trie | 0.833 | 0.228 | 0.193 | |
+    | B2:10 | 0.833 | 0.235 | 0.194 | Hard +0.7 (p = 0.015) |
+    | B4:0.5 (KGE prior) | **0.876** | **0.294** | 0.186 | Any +4.3, Hard +6.7 (both p < 0.001), F1 -0.7 (n.s.) |
+    | CC:0.9:2 (207 questions) | 0.865 | 0.314 | 0.217 | Any +0.5 (n.s.), Hard +1.5 (p = 0.05), F1 +0.26 (p = 0.006) |
+
+    On the same 207 questions CC vs B4: Hits@Any -1.0, Hits@Hard -3.4 (n.s.), F1 +1.9 (p = 0.006). The host was
+    rebooted by its user at question 207 of CC and its GPU went back to that user's services, so CC is partial and
+    CCe, B1+, OR and B3 were not run at 8B on the full set.
+  - **fp32 on CPU, first 100 questions** (`..._test[-100]_GCR-Meta-Llama-3.1-8B-Instruct-cpu.json`): B1 0.89 / 0.31 /
+    0.226, B2:10 0.89 / 0.32 / 0.231, B4:0.5 0.88 / 0.33 / 0.209, CC:0.9:2 0.90 / 0.33 / 0.230, CCe 0.89 / 0.32 / 0.230
+    (CCe vs B1 F1 +0.004, p = 0.03; vs B2:10 none). The 0.5B on the same questions: B1 0.78 / 0.28 / 0.165.
+  - 4-bit vs fp32 on those 100 questions: 4-bit is about 2 points lower for every method, per-question Hits@Any
+    agreement 0.97-0.98, same method ranking.
+  - Reading: the 8B lifts every level by ~8-11 Hits@Any. The gain from pricing absent edges grows with the model:
+    the KGE-prior soft trie (B4) adds 6.7 Hits@Hard at 8B vs 1.3 at 0.5B. Calibrated c(e) again trades recall for
+    precision (higher F1, fewer hard answers than B4) and does not beat the fixed penalty on hits. Verdict unchanged
+    (Reframe), with the contribution leaning further on the KGE-priced soft trie.
 - Wikidata-domain QA (`data_prep/build_wikidata_qa.py`, BRINK format): the 2019-08-26 Wikidata graph over the
   13,631 entities (139,043 facts) as the observed KG; 34,546 facts true in 2026 but missing in 2019 as the
   natural "removed" set; "What is the <property> of <entity>?" for pairs with exactly one value missing in 2019
