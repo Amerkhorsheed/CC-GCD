@@ -427,15 +427,14 @@ Findings:
 - Reliability: GCR's generate_sentence swallows exceptions; a first seed-1 run lost 352 of 540 questions to CUDA
   out-of-memory as silent empty predictions. All other logs have zero OOM errors (checked); the runner now retries a
   failed generation once and never writes it as empty, and the E1 drivers resume until every question is answered.
-- 8B: not runnable on the RTX 3060 Ti (GCR-Meta-Llama-3.1-8B: 15 GB bf16 weights; NF4 5.2 GB + KV cache of GCR's 10
-  beams x ~2.5k tokens 3.1 GB + context ~ 8.8 GB, above the 8 GB card with 4.8 GB free next to the desktop). The 12 GB
-  RTX 3060 holds it in 4-bit, and the machine's rules now let Amer run his own jobs there while the shared Qwen server
-  is stopped. Everything is prepared: checkpoint in `.hf/`, `bitsandbytes` 0.44.1, `--quant 4bit` in the E1 driver
-  (results go to `results/e1_brink/<dataset>_<split>_GCR-Meta-Llama-3.1-8B-Instruct-4bit.json`), and
-  `scripts/run_8b_on_3060.sh` (refuses while Qwen answers; stops the job if Qwen starts). It could not be started
-  from the session that ran this work: `sg`/`newgrp` are not installed and that session predates the gpu3060
-  membership. From a fresh login: `scripts/run_8b_on_3060.sh e8b.log --dataset fb15k237 --split "test[:200]"
-  --methods B1 B2:10 B4:0.5 CC:0.9:2 CCe:wikidata_gbm_struct:2`. 4-bit changes the logits (plan 12.1), so label it.
+- 8B (GCR-Meta-Llama-3.1-8B-Instruct): does not fit the 8 GB RTX 3060 Ti, and the 12 GB RTX 3060 could not be
+  opened from this session (`sg`/`newgrp` are not installed and the session predates the gpu3060 membership). It was
+  therefore run on CPU in fp32 (unquantized) on the first 100 FB15k-237 test questions (~2.5 min per question).
+  B1: Hits@Any 0.89, Hits@Hard 0.31, F1 0.226, faithful paths 1.0; B2:10: 0.89 / 0.32 / 0.231. The 0.5B on the same
+  100 questions: B1 0.78 / 0.28 / 0.165, B2:10 0.78 / 0.28 / 0.161, CCe 0.79 / 0.29 / 0.163. The 8B CCe run was at
+  90/100 at commit time; its row lands in `results/e1_brink/fb15k237_test[-100]_GCR-Meta-Llama-3.1-8B-Instruct-cpu.json`.
+  100 questions are too few for significance; the 8B raises the B1 level by ~11 Hits@Any but leaves the soft-vs-hard
+  gap small, as on 0.5B. On a GPU, `scripts/run_8b_on_3060.sh` (4-bit, Qwen watchdog) runs the full set from a fresh login.
 - Wikidata-domain QA (`data_prep/build_wikidata_qa.py`, BRINK format): the 2019-08-26 Wikidata graph over the
   13,631 entities (139,043 facts) as the observed KG; 34,546 facts true in 2026 but missing in 2019 as the
   natural "removed" set; "What is the <property> of <entity>?" for pairs with exactly one value missing in 2019
