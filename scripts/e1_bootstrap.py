@@ -76,7 +76,9 @@ def main():
     if args.bench == "brink":
         base = os.path.join(ROOT, "data", "e1_brink", args.dataset, args.model, args.split.replace(":", "-"))
         per, metrics = brink_per_question, ("Hits@Any", "Hits@Hard", "F1")
-        out = os.path.join(ROOT, "results", "e1_brink", f"{args.dataset}_{args.split.replace(':', '-')}_bootstrap_vs_{args.ref}.json")
+        msfx = "" if args.model == "GCR-Qwen2-0.5B-Instruct" else f"_{args.model}"
+        out = os.path.join(ROOT, "results", "e1_brink",
+                           f"{args.dataset}_{args.split.replace(':', '-')}{msfx}_bootstrap_vs_{args.ref.replace(':', '_')}.json")
     else:
         base = os.path.join(ROOT, "data", "e1_ikgqa", args.model, args.tag)
         per, metrics = ikgqa_per_question, ("Hit", "F1")
