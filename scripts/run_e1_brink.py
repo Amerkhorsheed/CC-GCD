@@ -139,7 +139,8 @@ def main():
     questions = list(kg.questions(split))[lo:hi]
     ids = {q["id"] for q in questions}
     kge_dir = os.path.join(ROOT, "data", "kge", f"brink-{tag}")
-    scorer = ComplExScorer(kge_dir)
+    import torch
+    scorer = ComplExScorer(kge_dir, device="cuda" if torch.cuda.is_available() else "cpu")
     rr, sig = cand_mode.split("+")[0], cand_mode.endswith("+sig")
     gen = CandidateGenerator(kg_obs.triples, scorer, rel_rank=rr, signature_filter=sig)
     gen.load(os.path.join(ROOT, "data", "candidates", f"brink-{tag}", f"{cand_mode}.npz"))
@@ -175,7 +176,10 @@ def main():
     runner = GCRRunner(args.model_path, k=args.k, dtype=args.dtype, attn_implementation="sdpa", hops=2, quant=args.quant)
     gold_all = json.load(open(os.path.join(root, f"gold_{split}.json")))
     # Quantized (8B) runs get their own summary file; full-precision runs keep the original names.
-    msfx = "" if args.quant == "none" else "_" + os.path.basename(args.model_path) + f"-{args.quant}"
+    import torch as _t
+    big = "8B" in args.model_path
+    msfx = "" if (args.quant == "none" and not big) else "_" + os.path.basename(args.model_path) + (
+        f"-{args.quant}" if args.quant != "none" else ("" if _t.cuda.is_available() else "-cpu"))
     summary_path = os.path.join(ROOT, "results", "e1_brink", f"{tag}_{args.split.replace(':', '-')}{msfx}.json")
     summary = json.load(open(summary_path)) if os.path.exists(summary_path) else {}
     for method in args.methods:
