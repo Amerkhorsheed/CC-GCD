@@ -1,0 +1,119 @@
+{
+ "reference": "B1",
+ "methods": {
+  "B1": {
+   "Hits@Any": {
+    "mean": 0.89,
+    "vs_ref": {
+     "diff": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "p_not_better": 1.0,
+     "n": 100
+    }
+   },
+   "Hits@Hard": {
+    "mean": 0.31,
+    "vs_ref": {
+     "diff": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "p_not_better": 1.0,
+     "n": 100
+    }
+   },
+   "F1": {
+    "mean": 0.2262,
+    "vs_ref": {
+     "diff": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "p_not_better": 1.0,
+     "n": 100
+    }
+   }
+  },
+  "B2_10": {
+   "Hits@Any": {
+    "mean": 0.89,
+    "vs_ref": {
+     "diff": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "p_not_better": 1.0,
+     "n": 100
+    }
+   },
+   "Hits@Hard": {
+    "mean": 0.32,
+    "vs_ref": {
+     "diff": 0.01,
+     "ci95": [
+      0.0,
+      0.03
+     ],
+     "p_not_better": 0.3649,
+     "n": 100
+    }
+   },
+   "F1": {
+    "mean": 0.2306,
+    "vs_ref": {
+     "diff": 0.0043,
+     "ci95": [
+      -0.0,
+      0.0102
+     ],
+     "p_not_better": 0.0254,
+     "n": 100
+    }
+   }
+  },
+  "CCe_wikidata_gbm_struct_2": {
+   "Hits@Any": {
+    "mean": 0.89,
+    "vs_ref": {
+     "diff": 0.0,
+     "ci95": [
+      0.0,
+      0.0
+     ],
+     "p_not_better": 1.0,
+     "n": 100
+    }
+   },
+   "Hits@Hard": {
+    "mean": 0.32,
+    "vs_ref": {
+     "diff": 0.01,
+     "ci95": [
+      0.0,
+      0.03
+     ],
+     "p_not_better": 0.3649,
+     "n": 100
+    }
+   },
+   "F1": {
+    "mean": 0.23,
+    "vs_ref": {
+     "diff": 0.0038,
+     "ci95": [
+      -0.0002,
+      0.009
+     ],
+     "p_not_better": 0.0331,
+     "n": 100
+    }
+   }
+  }
+ }
+}

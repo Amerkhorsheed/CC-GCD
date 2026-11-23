@@ -42,5 +42,27 @@
   "seconds": 14871.2,
   "candidates": "hybrid+sig R10 k5 hop1",
   "model": "rmanluo/GCR-Meta-Llama-3.1-8B-Instruct"
+ },
+ "CCe:wikidata_gbm_struct:2": {
+  "num_examples": 100,
+  "num_missing_predictions": 0,
+  "Hits@Any": 0.89,
+  "Precision": 0.3009,
+  "Recall": 0.2508,
+  "F1": 0.23,
+  "Hits@Hard": 0.32,
+  "HHR": 0.3596,
+  "paths_generated": 1000,
+  "paths_in_kg": 1000,
+  "faithful_path_rate": 1.0,
+  "paths_via_absent_edge": 30,
+  "share_kg_paths_via_absent_edge": 0.03,
+  "absent_edges_used": 30,
+  "absent_edges_used_true": 9,
+  "absent_edge_precision": 0.3,
+  "questions": 100,
+  "seconds": 15694.9,
+  "candidates": "hybrid+sig R10 k5 hop1",
+  "model": "rmanluo/GCR-Meta-Llama-3.1-8B-Instruct"
  }
 }

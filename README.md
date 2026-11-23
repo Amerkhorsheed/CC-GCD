@@ -431,10 +431,10 @@ Findings:
   opened from this session (`sg`/`newgrp` are not installed and the session predates the gpu3060 membership). It was
   therefore run on CPU in fp32 (unquantized) on the first 100 FB15k-237 test questions (~2.5 min per question).
   B1: Hits@Any 0.89, Hits@Hard 0.31, F1 0.226, faithful paths 1.0; B2:10: 0.89 / 0.32 / 0.231. The 0.5B on the same
-  100 questions: B1 0.78 / 0.28 / 0.165, B2:10 0.78 / 0.28 / 0.161, CCe 0.79 / 0.29 / 0.163. The 8B CCe run was at
-  90/100 at commit time; its row lands in `results/e1_brink/fb15k237_test[-100]_GCR-Meta-Llama-3.1-8B-Instruct-cpu.json`.
-  100 questions are too few for significance; the 8B raises the B1 level by ~11 Hits@Any but leaves the soft-vs-hard
-  gap small, as on 0.5B. On a GPU, `scripts/run_8b_on_3060.sh` (4-bit, Qwen watchdog) runs the full set from a fresh login.
+  100 questions: B1 0.78 / 0.28 / 0.165, B2:10 0.78 / 0.28 / 0.161, CCe 0.79 / 0.29 / 0.163. CCe:wikidata_gbm_struct:2 on the 8B:
+  0.89 / 0.32 / 0.230. Paired bootstrap vs B1: Hits@Hard +1.0 (p = 0.36), F1 +0.0038 (p = 0.03); vs B2:10: F1 -0.0006
+  (p = 0.55). So the 8B shows the same pattern as the 0.5B: a soft trie helps a little over the hard trie, and
+  per-edge c(e) adds nothing over a fixed penalty. The 8B raises the B1 level by ~11 Hits@Any. On a GPU, `scripts/run_8b_on_3060.sh` (4-bit, Qwen watchdog) runs the full set from a fresh login.
 - Wikidata-domain QA (`data_prep/build_wikidata_qa.py`, BRINK format): the 2019-08-26 Wikidata graph over the
   13,631 entities (139,043 facts) as the observed KG; 34,546 facts true in 2026 but missing in 2019 as the
   natural "removed" set; "What is the <property> of <entity>?" for pairs with exactly one value missing in 2019
