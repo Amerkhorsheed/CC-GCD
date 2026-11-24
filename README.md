@@ -395,13 +395,14 @@ Findings:
   rule of plan section 10 this is **Reframe**, not Go: the soft trie with an explicit generator and a priced
   absence beats the hard trie, while the calibrated observation model does not separate from simple penalties
   with this model. Not Stop: CC-GCD does beat B1 with the same generator.
-- Caveats: one 0.5B model (the plan's main setting is the 8B GCR checkpoint, which does not fit this GPU; see
-  below); B3 is approximated by four relation-frequency groups; B6 is an evidence oracle (true hypothetical
+- Caveats: the main table uses the 0.5B model (the plan's main setting, the 8B GCR checkpoint, was run in 4-bit
+  on a second machine; see below); B3 is approximated by four relation-frequency groups; B6 is an evidence oracle (true hypothetical
   edges free) rather than the true per-edge mechanism, which BRINK does not define; IKGQA's two levels share the
   same 300 questions. Two KGE seeds on BRINK agree (below). B1's few "absent edges used"
   on IKGQA come from beams that wrote a path without opening <PATH> (unconstrained) and matched a candidate.
-- Next steps that could change the verdict: the 8B checkpoint on a >= 24 GB GPU (`scripts/reproduce_gcr_webqsp_gpu.sh`
-  plus the E1 drivers with `--model_path rmanluo/GCR-Meta-Llama-3.1-8B-Instruct --dtype bf16`); better evidence,
+- Next steps that could change the verdict: the 8B checkpoint now has all E1 methods in 4-bit (below; same
+  verdict); a bf16 run on a >= 24 GB GPU (`scripts/reproduce_gcr_webqsp_gpu.sh` plus the E1 drivers with
+  `--model_path rmanluo/GCR-Meta-Llama-3.1-8B-Instruct --dtype bf16`) would remove the quantization caveat; better evidence,
   since the B6 bound shows +7 Hits@Hard is available to the same decoder. On the Wikidata-domain QA benchmark below
   (natural missingness, in-domain model) the priced soft trie gains 4-5 points of Hits@Hard over B1, but the
   calibrated c(e) still does not beat the tuned KGE-prior penalty: the contribution to claim is the explicit
@@ -427,30 +428,41 @@ Findings:
 - Reliability: GCR's generate_sentence swallows exceptions; a first seed-1 run lost 352 of 540 questions to CUDA
   out-of-memory as silent empty predictions. All other logs have zero OOM errors (checked); the runner now retries a
   failed generation once and never writes it as empty, and the E1 drivers resume until every question is answered.
-- 8B (GCR-Meta-Llama-3.1-8B-Instruct), FB15k-237 test. The 8 GB RTX 3060 Ti cannot hold it and the RTX 3060 is
-  not reachable from the Claude app (its shells run with NoNewPrivs, so `su`/`sg`/`sudo` fail). Two runs:
+- 8B (GCR-Meta-Llama-3.1-8B-Instruct), FB15k-237 test, all eight E1 methods. The 8 GB RTX 3060 Ti cannot hold it
+  and the RTX 3060 is not reachable from the Claude app (its shells run with NoNewPrivs, so `su`/`sg`/`sudo` fail).
   - **4-bit NF4 on an RTX 5070 Ti Laptop (12 GB, second machine), all 540 questions**
-    (`results/e1_brink/fb15k237_test_GCR-Meta-Llama-3.1-8B-Instruct-4bit.json`, bootstrap files beside it):
+    (`results/e1_brink/fb15k237_test_GCR-Meta-Llama-3.1-8B-Instruct-4bit.json`; paired bootstraps, 10,000
+    resamples, against B1, B2:10, B4:0.5 and CC:0.9:2 beside it):
 
     | Method | Hits@Any | Hits@Hard | F1 | vs B1 |
     |---|---|---|---|---|
     | B1 hard trie | 0.833 | 0.228 | 0.193 | |
-    | B2:10 | 0.833 | 0.235 | 0.194 | Hard +0.7 (p = 0.015) |
-    | B4:0.5 (KGE prior) | **0.876** | **0.294** | 0.186 | Any +4.3, Hard +6.7 (both p < 0.001), F1 -0.7 (n.s.) |
-    | CC:0.9:2 (207 questions) | 0.865 | 0.314 | 0.217 | Any +0.5 (n.s.), Hard +1.5 (p = 0.05), F1 +0.26 (p = 0.006) |
+    | B1+ candidates, no penalty | 0.857 | **0.294** | 0.170 | Any +2.4 (p = 0.054), Hard +6.7 (p < 0.001), F1 -2.2 (worse, p < 0.001) |
+    | B2:10 fixed penalty | 0.833 | 0.235 | 0.194 | Hard +0.7 (p = 0.015) |
+    | B3 per-relation quartiles | 0.833 | 0.235 | 0.194 | identical to B2:10 (the dev-selected quartile penalties are all 10) |
+    | B4:0.5 KGE prior | **0.876** | **0.294** | 0.186 | Any +4.3, Hard +6.7 (both p < 0.001), F1 -0.7 (n.s.) |
+    | CC:0.9:2 constant c | 0.837 | 0.235 | 0.195 | Any +0.4 (n.s.), Hard +0.7 (p = 0.014), F1 +0.2 (p < 0.001) |
+    | CCe per-edge c(e) | 0.837 | 0.239 | **0.196** | Any +0.4 (n.s.), Hard +1.1 (p = 0.002), F1 +0.3 (p < 0.001) |
+    | OR:10 evidence oracle (B6) | 0.915 | 0.341 | 0.217 | Any +8.2, Hard +11.3, F1 +2.5 (all p < 0.001) |
 
-    On the same 207 questions CC vs B4: Hits@Any -1.0, Hits@Hard -3.4 (n.s.), F1 +1.9 (p = 0.006). The host was
-    rebooted by its user at question 207 of CC and its GPU went back to that user's services, so CC is partial and
-    CCe, B1+, OR and B3 were not run at 8B on the full set.
-  - **fp32 on CPU, first 100 questions** (`..._test[-100]_GCR-Meta-Llama-3.1-8B-Instruct-cpu.json`): B1 0.89 / 0.31 /
-    0.226, B2:10 0.89 / 0.32 / 0.231, B4:0.5 0.88 / 0.33 / 0.209, CC:0.9:2 0.90 / 0.33 / 0.230, CCe 0.89 / 0.32 / 0.230
-    (CCe vs B1 F1 +0.004, p = 0.03; vs B2:10 none). The 0.5B on the same questions: B1 0.78 / 0.28 / 0.165.
+    CCe vs B2:10: Hard +0.4 (p = 0.22), F1 +0.2 (p = 0.03). CCe vs B4: Any -3.9, Hard -5.6 (both p < 0.001),
+    F1 +1.0 (p = 0.013). A first attempt stopped at question 207 of CC when the host's user rebooted it; the run
+    resumed from the saved answers. (CC on those first 207 questions alone read 0.865 / 0.314 / 0.217; that was a
+    subset, and only the full-set numbers above are comparable across methods.)
+  - **fp32 on CPU, first 100 questions** (`..._test[-100]_GCR-Meta-Llama-3.1-8B-Instruct-cpu.json`, bootstraps vs
+    B1, B2:10, B4:0.5): B1 0.89 / 0.31 / 0.226, B1+ 0.84 / 0.30 / 0.192, B2:10 0.89 / 0.32 / 0.231, B4:0.5 0.88 /
+    0.33 / 0.209, CC:0.9:2 0.90 / 0.33 / 0.230, CCe 0.89 / 0.32 / 0.230, OR:10 0.97 / 0.43 / 0.254 (OR vs B1: Any +8,
+    Hard +12, F1 +2.7, all p <= 0.001; CCe vs B1 F1 +0.4, p = 0.03; vs B2:10 none). B3 was stopped at 81 of 100 on
+    the CPU and replaced by the full GPU run above. The 0.5B on the same questions: B1 0.78 / 0.28 / 0.165.
   - 4-bit vs fp32 on those 100 questions: 4-bit is about 2 points lower for every method, per-question Hits@Any
     agreement 0.97-0.98, same method ranking.
-  - Reading: the 8B lifts every level by ~8-11 Hits@Any. The gain from pricing absent edges grows with the model:
-    the KGE-prior soft trie (B4) adds 6.7 Hits@Hard at 8B vs 1.3 at 0.5B. Calibrated c(e) again trades recall for
-    precision (higher F1, fewer hard answers than B4) and does not beat the fixed penalty on hits. Verdict unchanged
-    (Reframe), with the contribution leaning further on the KGE-priced soft trie.
+  - Reading: the 8B lifts every level by ~8-11 Hits@Any, and the room for priced absent edges grows with it: the
+    evidence oracle adds 11.3 Hits@Hard at 8B vs 7.0 at 0.5B. The KGE-prior soft trie (B4) captures 6.7 of those
+    11.3 points (vs 1.3 at 0.5B) without losing F1 significantly. The calibrated observation model (CC, CCe)
+    stays conservative: small but significant gains over B1 on Hits@Hard and F1 and the best F1 short of the
+    oracle, yet no hit gain over the tuned fixed penalty and well below B4 on hits. Pricing nothing (B1+) reaches
+    B4's Hits@Hard but loses 2.2 F1. Verdict unchanged (Reframe): the contribution is the explicit generator +
+    soft trie + KGE-calibrated pi; c(e) is a precision knob, not the source of the gain.
 - Wikidata-domain QA (`data_prep/build_wikidata_qa.py`, BRINK format): the 2019-08-26 Wikidata graph over the
   13,631 entities (139,043 facts) as the observed KG; 34,546 facts true in 2026 but missing in 2019 as the
   natural "removed" set; "What is the <property> of <entity>?" for pairs with exactly one value missing in 2019
