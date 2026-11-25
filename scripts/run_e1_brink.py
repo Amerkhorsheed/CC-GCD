@@ -178,13 +178,15 @@ def main():
     # Quantized (8B) runs get their own summary file; full-precision runs keep the original names.
     import torch as _t
     big = "8B" in args.model_path
+    gpu_full = big and args.quant == "none" and _t.cuda.is_available()  # 8B full precision on a GPU (bf16 + offload)
     msfx = "" if (args.quant == "none" and not big) else "_" + os.path.basename(args.model_path) + (
-        f"-{args.quant}" if args.quant != "none" else ("" if _t.cuda.is_available() else "-cpu"))
+        f"-{args.quant}" if args.quant != "none" else (f"-{args.dtype}" if gpu_full else "-cpu"))
     summary_path = os.path.join(ROOT, "results", "e1_brink", f"{tag}_{args.split.replace(':', '-')}{msfx}.json")
     summary = json.load(open(summary_path)) if os.path.exists(summary_path) else {}
     for method in args.methods:
         mtag = method.replace(":", "_").replace("/", "-")  # method name as one path component
-        model_tag = os.path.basename(args.model_path) + ("" if args.quant == "none" else f"-{args.quant}")
+        model_tag = os.path.basename(args.model_path) + (
+            f"-{args.quant}" if args.quant != "none" else (f"-{args.dtype}" if gpu_full else ""))
         out_dir = os.path.join(ROOT, "data", "e1_brink", tag, model_tag,
                                args.split.replace(":", "-"), mtag)
         os.makedirs(out_dir, exist_ok=True)

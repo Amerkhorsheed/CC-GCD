@@ -84,7 +84,23 @@ class GCRRunner:
             use_assistant_model=False, assistant_model_path=None,
         )
         self.model = GraphConstrainedDecodingModel(args)
-        self.model.prepare_for_inference()
+        gpu_mem = os.environ.get("CCGCD_MAX_GPU_MEM")  # e.g. "7GiB": bf16 8B on a 12 GB card, rest kept in RAM
+        if gpu_mem:
+            from transformers import AutoModelForCausalLM
+            orig = AutoModelForCausalLM.from_pretrained.__func__
+
+            def capped(cls, *a, **kw):
+                kw.setdefault("max_memory", {0: gpu_mem, "cpu": os.environ.get("CCGCD_MAX_CPU_MEM", "24GiB")})
+                return orig(cls, *a, **kw)
+            AutoModelForCausalLM.from_pretrained = classmethod(capped)
+            try:
+                self.model.prepare_for_inference()
+            finally:
+                AutoModelForCausalLM.from_pretrained = classmethod(orig)
+            print("[GCRRunner] device map:", sorted(set(getattr(self.model.model, "hf_device_map", {}).values()),
+                                                   key=str), flush=True)
+        else:
+            self.model.prepare_for_inference()
         self.hops = hops
         self.builder = PathGenerationWithAnswerPromptBuilder(self.model.tokenizer, "zero-shot", index_path_length=hops)
         self._predict = _load_prediction_fn()
