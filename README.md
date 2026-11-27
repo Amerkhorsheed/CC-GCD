@@ -396,13 +396,12 @@ Findings:
   absence beats the hard trie, while the calibrated observation model does not separate from simple penalties
   with this model. Not Stop: CC-GCD does beat B1 with the same generator.
 - Caveats: the main table uses the 0.5B model (the plan's main setting, the 8B GCR checkpoint, was run in 4-bit
-  on a second machine; see below); B3 is approximated by four relation-frequency groups; B6 is an evidence oracle (true hypothetical
+  and in bf16 on a second machine; see below); B3 is approximated by four relation-frequency groups; B6 is an evidence oracle (true hypothetical
   edges free) rather than the true per-edge mechanism, which BRINK does not define; IKGQA's two levels share the
   same 300 questions. Two KGE seeds on BRINK agree (below). B1's few "absent edges used"
   on IKGQA come from beams that wrote a path without opening <PATH> (unconstrained) and matched a candidate.
-- Next steps that could change the verdict: the 8B checkpoint now has all E1 methods in 4-bit (below; same
-  verdict); a bf16 run on a >= 24 GB GPU (`scripts/reproduce_gcr_webqsp_gpu.sh` plus the E1 drivers with
-  `--model_path rmanluo/GCR-Meta-Llama-3.1-8B-Instruct --dtype bf16`) would remove the quantization caveat; better evidence,
+- Next steps that could change the verdict: the 8B checkpoint now has all E1 methods in both 4-bit and bf16
+  (below; same verdict); better evidence,
   since the B6 bound shows +7 Hits@Hard is available to the same decoder. On the Wikidata-domain QA benchmark below
   (natural missingness, in-domain model) the priced soft trie gains 4-5 points of Hits@Hard over B1, but the
   calibrated c(e) still does not beat the tuned KGE-prior penalty: the contribution to claim is the explicit
@@ -449,6 +448,26 @@ Findings:
     F1 +1.0 (p = 0.013). A first attempt stopped at question 207 of CC when the host's user rebooted it; the run
     resumed from the saved answers. (CC on those first 207 questions alone read 0.865 / 0.314 / 0.217; that was a
     subset, and only the full-set numbers above are comparable across methods.)
+  - **bf16 (full precision) on the same RTX 5070 Ti, all 540 questions**
+    (`results/e1_brink/fb15k237_test_GCR-Meta-Llama-3.1-8B-Instruct-bf16.json`, bootstraps vs B1, B2:10, B4:0.5,
+    CC:0.9:2 beside it). The 15 GB of weights do not fit the 12 GB card, so 10.5 GiB stay on the GPU and the rest
+    is kept in RAM and streamed to the GPU each step (`CCGCD_MAX_GPU_MEM`); all compute is on the GPU, ~38 s per
+    question, 46 h for the eight methods. One generation that ran out of memory was redone with an 8 GiB cap.
+
+    | Method | Hits@Any | Hits@Hard | F1 | vs B1 |
+    |---|---|---|---|---|
+    | B1 hard trie | 0.824 | 0.222 | 0.187 | |
+    | B1+ candidates, no penalty | 0.854 | 0.293 | 0.171 | Any +3.0 (p = 0.02), Hard +7.0 (p < 0.001), F1 -1.6 (worse, p < 0.001) |
+    | B2:10 fixed penalty | 0.824 | 0.231 | 0.189 | Hard +0.9 (p = 0.005) |
+    | B3 per-relation quartiles | 0.824 | 0.231 | 0.189 | identical to B2:10 again |
+    | B4:0.5 KGE prior | **0.870** | **0.291** | 0.183 | Any +4.6, Hard +6.9 (both p < 0.001), F1 -0.4 (n.s.) |
+    | CC:0.9:2 constant c | 0.826 | 0.231 | 0.189 | Hard +0.9 (p = 0.004), F1 +0.2 (p = 0.02) |
+    | CCe per-edge c(e) | 0.828 | 0.231 | **0.190** | Hard +0.9 (p = 0.005), F1 +0.2 (p = 0.009) |
+    | OR:10 evidence oracle (B6) | 0.907 | 0.335 | 0.213 | Any +8.3, Hard +11.3, F1 +2.6 (all p < 0.001) |
+
+    CCe vs B2:10: no difference (Hard 0.0, F1 +0.1, p = 0.10). CCe vs B4: Any -4.3, Hard -5.9 (both p < 0.001), F1
+    +0.6 (p = 0.07). bf16 and 4-bit agree within about one point on every method and give the same ranking and the
+    same significant differences, so the 4-bit table above is not a quantization artefact.
   - **fp32 on CPU, first 100 questions** (`..._test[-100]_GCR-Meta-Llama-3.1-8B-Instruct-cpu.json`, bootstraps vs
     B1, B2:10, B4:0.5): B1 0.89 / 0.31 / 0.226, B1+ 0.84 / 0.30 / 0.192, B2:10 0.89 / 0.32 / 0.231, B4:0.5 0.88 /
     0.33 / 0.209, CC:0.9:2 0.90 / 0.33 / 0.230, CCe 0.89 / 0.32 / 0.230, OR:10 0.97 / 0.43 / 0.254 (OR vs B1: Any +8,
